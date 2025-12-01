@@ -145,6 +145,24 @@ export function initAlarmcentraleAnimation(containerId) {
         mouseY = (event.clientY - windowHalfY) * 0.0001;
     });
 
+    // Function to update camera distance based on screen width
+    function updateCameraPosition() {
+        const width = window.innerWidth;
+        // Mobile: further away (larger z), Desktop: closer (smaller z)
+        // Base Z is 80 for desktop (>1200px), maybe 120 for mobile (<600px)
+        
+        if (width < 600) {
+            camera.position.z = 110; // Mobile
+        } else if (width < 900) {
+            camera.position.z = 95; // Tablet
+        } else {
+            camera.position.z = 80; // Desktop
+        }
+    }
+
+    // Initial call
+    updateCameraPosition();
+
     // Handle resize
     window.addEventListener('resize', () => {
         const width = container.clientWidth;
@@ -152,6 +170,9 @@ export function initAlarmcentraleAnimation(containerId) {
         camera.aspect = width / height;
         camera.updateProjectionMatrix();
         renderer.setSize(width, height);
+        
+        // Update responsiveness
+        updateCameraPosition();
     });
 
     // Animation loop
