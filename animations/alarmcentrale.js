@@ -160,19 +160,19 @@ export function initAlarmcentraleAnimation(containerId) {
         requestAnimationFrame(animate);
         time += 0.002;
 
-        // Smooth infinite loop rotation
-        // Using sine/cosine for smooth, repeating motion
-        const loopSpeed = 0.003;
-        const baseRotationY = Math.sin(time * loopSpeed) * 0.5; // Smooth Y rotation loop
-        const baseRotationX = Math.cos(time * loopSpeed * 0.7) * 0.3; // Smooth X rotation loop (slightly different speed)
+        // Smooth infinite loop rotation (Continuous Spin)
+        // Increment rotation continuously for infinite loop
+        mainGroup.rotation.y += 0.0015; // Constant smooth spin
+        mainGroup.rotation.x += 0.0005; // Slight tilt rotation
 
         // Mouse Interaction (Tilts the whole sphere)
         targetRotationY += (mouseX - targetRotationY) * 0.05;
         targetRotationX += (mouseY - targetRotationX) * 0.05;
         
-        // Combine loop rotation with mouse influence
-        mainGroup.rotation.y = baseRotationY + targetRotationY;
-        mainGroup.rotation.x = baseRotationX + targetRotationX;
+        // Apply mouse influence on top of continuous auto rotation
+        // We add the mouse offset to the current auto-rotation state
+        mainGroup.rotation.y += targetRotationY * 0.05; 
+        mainGroup.rotation.x += targetRotationX * 0.05;
 
         // Background subtle rotation
         particleSystem.rotation.y = -time * 0.02;
