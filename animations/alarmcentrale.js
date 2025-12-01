@@ -14,7 +14,7 @@ export function initAlarmcentraleAnimation(containerId) {
         radius: 45,
         centralNodeSize: 2.5,
         satelliteNodeSize: 0.6,
-        lineOpacity: 0.25, // Even softer lines
+        lineOpacity: 0.25,
         maxVerticalSpread: 30
     };
 
@@ -35,7 +35,7 @@ export function initAlarmcentraleAnimation(containerId) {
     const mainGroup = new THREE.Group();
     scene.add(mainGroup);
 
-    // Materials - Back to clean/flat but with opacity layers
+    // Materials
     const nodeMaterial = new THREE.MeshBasicMaterial({ 
         color: config.color
     });
@@ -43,8 +43,8 @@ export function initAlarmcentraleAnimation(containerId) {
     const haloMaterial = new THREE.MeshBasicMaterial({
         color: config.color,
         transparent: true,
-        opacity: 0.15, // Very subtle halo
-        side: THREE.BackSide // Render inside if needed, but for transparency Front is fine.
+        opacity: 0.15, 
+        side: THREE.BackSide
     });
 
     const lineMaterial = new THREE.LineBasicMaterial({ 
@@ -58,7 +58,7 @@ export function initAlarmcentraleAnimation(containerId) {
     const centralNode = new THREE.Mesh(centralGeometry, nodeMaterial);
     mainGroup.add(centralNode);
 
-    // Halo sphere around center
+    // Halo sphere
     const haloGeometry = new THREE.SphereGeometry(config.centralNodeSize * 1.8, 32, 32);
     const haloNode = new THREE.Mesh(haloGeometry, haloMaterial);
     mainGroup.add(haloNode);
@@ -70,7 +70,6 @@ export function initAlarmcentraleAnimation(containerId) {
     for (let i = 0; i < config.particleCount; i++) {
         const node = new THREE.Mesh(satelliteGeometry, nodeMaterial);
         
-        // Random position - Flatter distribution
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.acos((Math.random() * 2) - 1);
         const rBase = 20 + Math.random() * (config.radius - 20);
@@ -91,7 +90,7 @@ export function initAlarmcentraleAnimation(containerId) {
         mainGroup.add(node);
     }
 
-    // Background Particles (Subtler depth)
+    // Background Particles
     const particlesGeometry = new THREE.BufferGeometry();
     const particleCount = 40;
     const particlePositions = new Float32Array(particleCount * 3);
@@ -161,7 +160,7 @@ export function initAlarmcentraleAnimation(containerId) {
         const windowHalfX = window.innerWidth / 2;
         const windowHalfY = window.innerHeight / 2;
         
-        mouseX = (event.clientX - windowHalfX) * 0.0001; // Sensitivity
+        mouseX = (event.clientX - windowHalfX) * 0.0001;
         mouseY = (event.clientY - windowHalfY) * 0.0001;
     });
 
@@ -180,28 +179,27 @@ export function initAlarmcentraleAnimation(containerId) {
         requestAnimationFrame(animate);
         time += 0.002;
 
-        // 1. Pulse (Slower, smooth breathing)
-        const pulseScale = 1 + Math.sin(time * 2.5) * 0.08;
+        // 1. Enhanced Pulse (Larger amplitude, slower breathing)
+        // Increased scale multiplier from 0.08 to 0.15
+        const pulseScale = 1 + Math.sin(time * 2) * 0.15; 
         centralNode.scale.set(pulseScale, pulseScale, pulseScale);
-        // Halo pulses slightly differently
-        const haloScale = 1 + Math.sin(time * 2.5 - 0.5) * 0.05;
+        
+        // Halo pulses slightly offset and larger
+        const haloScale = 1 + Math.sin(time * 2 - 0.2) * 0.1;
         haloNode.scale.set(haloScale, haloScale, haloScale);
 
-        // 2. Parallax / Mouse Interaction (Smooth damping)
+        // 2. Parallax
         targetRotationY = mouseX;
         targetRotationX = mouseY;
         
-        // Auto gentle sway + Mouse influence
         mainGroup.rotation.y += (targetRotationY - mainGroup.rotation.y) * 0.05;
         mainGroup.rotation.x += (targetRotationX - mainGroup.rotation.x) * 0.05;
-        
-        // Add constant gentle sway on top
         mainGroup.rotation.y += Math.sin(time * 0.1) * 0.001; 
 
-        // 3. Background rotation
+        // 3. Background
         particleSystem.rotation.y = time * 0.02;
 
-        // 4. Organic node movement
+        // 4. Organic movement
         satellites.forEach(sat => {
             const ox = sat.userData.offset.x;
             const oy = sat.userData.offset.y;
