@@ -15,7 +15,7 @@ export function initAlarmcentraleAnimation(containerId) {
         centralNodeSize: 2.5,
         satelliteNodeSize: 0.5,
         lineOpacity: 0.2,
-        connectionDistance: 12 // Distance to connect neighbors on surface
+        connectionDistance: 18 // Distance to connect neighbors on surface (increased for better mesh)
     };
 
     // Scene setup
@@ -161,14 +161,15 @@ export function initAlarmcentraleAnimation(containerId) {
         time += 0.002;
 
         // Rigid Body Rotation (The sphere spins)
-        // Auto rotation
-        mainGroup.rotation.y += 0.002; 
-        mainGroup.rotation.x += 0.001;
+        // Auto rotation - more noticeable
+        mainGroup.rotation.y += 0.005; 
+        mainGroup.rotation.x += 0.003;
 
         // Mouse Interaction (Tilts the whole sphere)
         targetRotationY = mouseX;
         targetRotationX = mouseY;
         
+        // Apply mouse influence on top of auto rotation
         mainGroup.rotation.y += (targetRotationY - mainGroup.rotation.y) * 0.05;
         mainGroup.rotation.x += (targetRotationX - mainGroup.rotation.x) * 0.05;
 
