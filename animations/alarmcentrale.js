@@ -40,28 +40,16 @@ export function initAlarmcentraleAnimation(containerId) {
         color: config.color
     });
 
-    const haloMaterial = new THREE.MeshBasicMaterial({
-        color: config.color,
-        transparent: true,
-        opacity: 0.15, 
-        side: THREE.BackSide
-    });
-
     const lineMaterial = new THREE.LineBasicMaterial({ 
         color: config.color, 
         transparent: true, 
         opacity: config.lineOpacity 
     });
 
-    // 1. Central Node + Halo
+    // 1. Central Node
     const centralGeometry = new THREE.SphereGeometry(config.centralNodeSize, 32, 32);
     const centralNode = new THREE.Mesh(centralGeometry, nodeMaterial);
     mainGroup.add(centralNode);
-
-    // Halo sphere
-    const haloGeometry = new THREE.SphereGeometry(config.centralNodeSize * 1.8, 32, 32);
-    const haloNode = new THREE.Mesh(haloGeometry, haloMaterial);
-    mainGroup.add(haloNode);
 
     // 2. Satellite Nodes
     const satellites = [];
@@ -179,16 +167,7 @@ export function initAlarmcentraleAnimation(containerId) {
         requestAnimationFrame(animate);
         time += 0.002;
 
-        // 1. Enhanced Pulse (Larger amplitude, slower breathing)
-        // Increased scale multiplier from 0.08 to 0.15
-        const pulseScale = 1 + Math.sin(time * 2) * 0.15; 
-        centralNode.scale.set(pulseScale, pulseScale, pulseScale);
-        
-        // Halo pulses slightly offset and larger
-        const haloScale = 1 + Math.sin(time * 2 - 0.2) * 0.1;
-        haloNode.scale.set(haloScale, haloScale, haloScale);
-
-        // 2. Parallax
+        // 1. Parallax
         targetRotationY = mouseX;
         targetRotationX = mouseY;
         
@@ -196,10 +175,10 @@ export function initAlarmcentraleAnimation(containerId) {
         mainGroup.rotation.x += (targetRotationX - mainGroup.rotation.x) * 0.05;
         mainGroup.rotation.y += Math.sin(time * 0.1) * 0.001; 
 
-        // 3. Background
+        // 2. Background
         particleSystem.rotation.y = time * 0.02;
 
-        // 4. Organic movement
+        // 3. Organic movement
         satellites.forEach(sat => {
             const ox = sat.userData.offset.x;
             const oy = sat.userData.offset.y;
