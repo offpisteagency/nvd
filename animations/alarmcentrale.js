@@ -10,12 +10,12 @@ export function initAlarmcentraleAnimation(containerId) {
     // Configuration
     const config = {
         color: 0xadadad,
-        particleCount: 20,
-        radius: 45,
+        particleCount: 40, // Increased to form a better sphere
+        radius: 25, // Tighter radius for the sphere
         centralNodeSize: 2.5,
-        satelliteNodeSize: 0.6,
-        lineOpacity: 0.25,
-        maxVerticalSpread: 30
+        satelliteNodeSize: 0.5,
+        lineOpacity: 0.2,
+        connectionDistance: 12 // Distance to connect neighbors on surface
     };
 
     // Scene setup
@@ -51,29 +51,33 @@ export function initAlarmcentraleAnimation(containerId) {
     const centralNode = new THREE.Mesh(centralGeometry, nodeMaterial);
     mainGroup.add(centralNode);
 
-    // 2. Satellite Nodes
+    // 2. Satellite Nodes (Fibonacci Sphere Distribution)
     const satellites = [];
     const satelliteGeometry = new THREE.SphereGeometry(config.satelliteNodeSize, 16, 16);
+
+    const phi = Math.PI * (3 - Math.sqrt(5)); // Golden angle
 
     for (let i = 0; i < config.particleCount; i++) {
         const node = new THREE.Mesh(satelliteGeometry, nodeMaterial);
         
-        const theta = Math.random() * Math.PI * 2;
-        const phi = Math.acos((Math.random() * 2) - 1);
-        const rBase = 20 + Math.random() * (config.radius - 20);
+        const y = 1 - (i / (config.particleCount - 1)) * 2; // y goes from 1 to -1
+        const radiusAtY = Math.sqrt(1 - y * y); // Radius at y
         
-        let x = rBase * Math.sin(phi) * Math.cos(theta);
-        let y = rBase * Math.sin(phi) * Math.sin(theta);
-        let z = rBase * Math.cos(phi);
-        y = Math.max(Math.min(y, config.maxVerticalSpread), -config.maxVerticalSpread) * 0.6;
+        const theta = phi * i; // Golden angle increment
+        
+        const x = Math.cos(theta) * radiusAtY;
+        const z = Math.sin(theta) * radiusAtY;
 
-        node.position.set(x, y, z);
+        // Scale to desired radius
+        node.position.set(
+            x * config.radius,
+            y * config.radius,
+            z * config.radius
+        );
 
-        node.userData = {
-            originalPos: node.position.clone(),
-            offset: new THREE.Vector3(Math.random()*100, Math.random()*100, Math.random()*100),
-        };
-
+        // Store original position relative to the group (rigid body)
+        // We don't need to store velocity/offset because we rotate the whole group
+        
         satellites.push(node);
         mainGroup.add(node);
     }
@@ -101,41 +105,32 @@ export function initAlarmcentraleAnimation(containerId) {
     scene.add(particleSystem);
 
 
-    // Pre-calculate neighbors
-    satellites.forEach((sat, index) => {
-        const distances = satellites.map((other, otherIndex) => {
-            if (index === otherIndex) return { index: -1, dist: Infinity };
-            return { 
-                index: otherIndex, 
-                dist: sat.position.distanceTo(other.position) 
-            };
-        }).sort((a, b) => a.dist - b.dist);
+    // 3. Connections (Calculated once, as relative positions don't change in a rigid body)
+    const lineGeometry = new THREE.BufferGeometry();
+    const positions = [];
+    const centerPos = centralNode.position; // (0,0,0)
 
-        sat.userData.neighbors = [distances[0].index, distances[1].index];
+    // Connect all satellites to center
+    satellites.forEach(sat => {
+        positions.push(0, 0, 0);
+        positions.push(sat.position.x, sat.position.y, sat.position.z);
     });
 
-    // 3. Lines
-    const lineGeometry = new THREE.BufferGeometry();
+    // Connect satellites to neighbors (Triangular Mesh)
+    for (let i = 0; i < satellites.length; i++) {
+        for (let j = i + 1; j < satellites.length; j++) {
+            const dist = satellites[i].position.distanceTo(satellites[j].position);
+            if (dist < config.connectionDistance) {
+                positions.push(satellites[i].position.x, satellites[i].position.y, satellites[i].position.z);
+                positions.push(satellites[j].position.x, satellites[j].position.y, satellites[j].position.z);
+            }
+        }
+    }
+    
+    lineGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     const lineSegments = new THREE.LineSegments(lineGeometry, lineMaterial);
     mainGroup.add(lineSegments);
 
-    function updateConnections() {
-        const positions = [];
-        const centerPos = centralNode.position;
-
-        satellites.forEach((sat) => {
-            positions.push(centerPos.x, centerPos.y, centerPos.z);
-            positions.push(sat.position.x, sat.position.y, sat.position.z);
-
-            sat.userData.neighbors.forEach(neighborIndex => {
-                const neighbor = satellites[neighborIndex];
-                positions.push(sat.position.x, sat.position.y, sat.position.z);
-                positions.push(neighbor.position.x, neighbor.position.y, neighbor.position.z);
-            });
-        });
-
-        lineGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    }
 
     // Mouse Parallax State
     let mouseX = 0;
@@ -143,11 +138,9 @@ export function initAlarmcentraleAnimation(containerId) {
     let targetRotationX = 0;
     let targetRotationY = 0;
 
-    // Mouse Move Listener
     document.addEventListener('mousemove', (event) => {
         const windowHalfX = window.innerWidth / 2;
         const windowHalfY = window.innerHeight / 2;
-        
         mouseX = (event.clientX - windowHalfX) * 0.0001;
         mouseY = (event.clientY - windowHalfY) * 0.0001;
     });
@@ -167,33 +160,21 @@ export function initAlarmcentraleAnimation(containerId) {
         requestAnimationFrame(animate);
         time += 0.002;
 
-        // 1. Parallax
+        // Rigid Body Rotation (The sphere spins)
+        // Auto rotation
+        mainGroup.rotation.y += 0.002; 
+        mainGroup.rotation.x += 0.001;
+
+        // Mouse Interaction (Tilts the whole sphere)
         targetRotationY = mouseX;
         targetRotationX = mouseY;
         
         mainGroup.rotation.y += (targetRotationY - mainGroup.rotation.y) * 0.05;
         mainGroup.rotation.x += (targetRotationX - mainGroup.rotation.x) * 0.05;
-        mainGroup.rotation.y += Math.sin(time * 0.1) * 0.001; 
 
-        // 2. Background
-        particleSystem.rotation.y = time * 0.02;
+        // Background subtle rotation
+        particleSystem.rotation.y = -time * 0.02;
 
-        // 3. Organic movement
-        satellites.forEach(sat => {
-            const ox = sat.userData.offset.x;
-            const oy = sat.userData.offset.y;
-            const oz = sat.userData.offset.z;
-
-            const floatX = Math.sin(time + ox) * 2;
-            const floatY = Math.cos(time * 0.8 + oy) * 1.5;
-            const floatZ = Math.sin(time * 0.5 + oz) * 2;
-
-            sat.position.x = sat.userData.originalPos.x + floatX;
-            sat.position.y = sat.userData.originalPos.y + floatY;
-            sat.position.z = sat.userData.originalPos.z + floatZ;
-        });
-
-        updateConnections();
         renderer.render(scene, camera);
     }
     
