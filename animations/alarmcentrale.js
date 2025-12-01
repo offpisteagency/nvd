@@ -14,7 +14,7 @@ export function initAlarmcentraleAnimation(containerId) {
         radius: 45,
         centralNodeSize: 2.5,
         satelliteNodeSize: 0.6,
-        lineOpacity: 0.3, // Reduced opacity for subtler lines
+        lineOpacity: 0.25, // Even softer lines
         maxVerticalSpread: 30
     };
 
@@ -29,37 +29,22 @@ export function initAlarmcentraleAnimation(containerId) {
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    
-    // Enable shadow map for depth
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    
     container.appendChild(renderer.domElement);
-
-    // Lighting (New Premium Feature)
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); // Soft fill
-    scene.add(ambientLight);
-
-    const mainLight = new THREE.DirectionalLight(0xffffff, 1.0);
-    mainLight.position.set(10, 20, 30);
-    scene.add(mainLight);
-
-    const pointLight = new THREE.PointLight(0xffffff, 0.5, 100);
-    pointLight.position.set(-10, -10, 20);
-    scene.add(pointLight);
 
     // Group to hold everything
     const mainGroup = new THREE.Group();
     scene.add(mainGroup);
 
-    // Materials (New Premium Feature)
-    // MeshPhysicalMaterial for high-end look (roughness/metalness)
-    const nodeMaterial = new THREE.MeshPhysicalMaterial({ 
+    // Materials - Back to clean/flat but with opacity layers
+    const nodeMaterial = new THREE.MeshBasicMaterial({ 
+        color: config.color
+    });
+
+    const haloMaterial = new THREE.MeshBasicMaterial({
         color: config.color,
-        metalness: 0.1,
-        roughness: 0.4,
-        clearcoat: 0.8,
-        clearcoatRoughness: 0.2
+        transparent: true,
+        opacity: 0.15, // Very subtle halo
+        side: THREE.BackSide // Render inside if needed, but for transparency Front is fine.
     });
 
     const lineMaterial = new THREE.LineBasicMaterial({ 
@@ -68,33 +53,35 @@ export function initAlarmcentraleAnimation(containerId) {
         opacity: config.lineOpacity 
     });
 
-    // 1. Central Node
-    const centralGeometry = new THREE.SphereGeometry(config.centralNodeSize, 64, 64); // Higher poly for smooth shading
+    // 1. Central Node + Halo
+    const centralGeometry = new THREE.SphereGeometry(config.centralNodeSize, 32, 32);
     const centralNode = new THREE.Mesh(centralGeometry, nodeMaterial);
     mainGroup.add(centralNode);
 
+    // Halo sphere around center
+    const haloGeometry = new THREE.SphereGeometry(config.centralNodeSize * 1.8, 32, 32);
+    const haloNode = new THREE.Mesh(haloGeometry, haloMaterial);
+    mainGroup.add(haloNode);
+
     // 2. Satellite Nodes
     const satellites = [];
-    const satelliteGeometry = new THREE.SphereGeometry(config.satelliteNodeSize, 32, 32); // Higher poly
+    const satelliteGeometry = new THREE.SphereGeometry(config.satelliteNodeSize, 16, 16);
 
     for (let i = 0; i < config.particleCount; i++) {
         const node = new THREE.Mesh(satelliteGeometry, nodeMaterial);
         
-        // Random position - Flatter distribution (ellipsoid-like)
+        // Random position - Flatter distribution
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.acos((Math.random() * 2) - 1);
-        
         const rBase = 20 + Math.random() * (config.radius - 20);
         
         let x = rBase * Math.sin(phi) * Math.cos(theta);
         let y = rBase * Math.sin(phi) * Math.sin(theta);
         let z = rBase * Math.cos(phi);
-        
         y = Math.max(Math.min(y, config.maxVerticalSpread), -config.maxVerticalSpread) * 0.6;
 
         node.position.set(x, y, z);
 
-        // Store initial position for animation
         node.userData = {
             originalPos: node.position.clone(),
             offset: new THREE.Vector3(Math.random()*100, Math.random()*100, Math.random()*100),
@@ -104,32 +91,30 @@ export function initAlarmcentraleAnimation(containerId) {
         mainGroup.add(node);
     }
 
-    // Background Particles (New Premium Feature: Depth)
+    // Background Particles (Subtler depth)
     const particlesGeometry = new THREE.BufferGeometry();
-    const particleCount = 50;
+    const particleCount = 40;
     const particlePositions = new Float32Array(particleCount * 3);
 
     for(let i = 0; i < particleCount * 3; i += 3) {
-        // Spread wide in background
-        particlePositions[i] = (Math.random() - 0.5) * 200; // x
-        particlePositions[i+1] = (Math.random() - 0.5) * 100; // y
-        particlePositions[i+2] = (Math.random() - 0.5) * 100 - 20; // z (behind)
+        particlePositions[i] = (Math.random() - 0.5) * 200;
+        particlePositions[i+1] = (Math.random() - 0.5) * 100;
+        particlePositions[i+2] = (Math.random() - 0.5) * 100 - 20;
     }
 
     particlesGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
     const particlesMaterial = new THREE.PointsMaterial({
         color: 0xadadad,
-        size: 0.3,
+        size: 0.4,
         transparent: true,
-        opacity: 0.2, // Very faint
+        opacity: 0.15,
         sizeAttenuation: true
     });
-
     const particleSystem = new THREE.Points(particlesGeometry, particlesMaterial);
     scene.add(particleSystem);
 
 
-    // Pre-calculate fixed neighbors for each satellite (2 neighbors each)
+    // Pre-calculate neighbors
     satellites.forEach((sat, index) => {
         const distances = satellites.map((other, otherIndex) => {
             if (index === otherIndex) return { index: -1, dist: Infinity };
@@ -165,14 +150,27 @@ export function initAlarmcentraleAnimation(containerId) {
         lineGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     }
 
+    // Mouse Parallax State
+    let mouseX = 0;
+    let mouseY = 0;
+    let targetRotationX = 0;
+    let targetRotationY = 0;
+
+    // Mouse Move Listener
+    document.addEventListener('mousemove', (event) => {
+        const windowHalfX = window.innerWidth / 2;
+        const windowHalfY = window.innerHeight / 2;
+        
+        mouseX = (event.clientX - windowHalfX) * 0.0001; // Sensitivity
+        mouseY = (event.clientY - windowHalfY) * 0.0001;
+    });
+
     // Handle resize
     window.addEventListener('resize', () => {
         const width = container.clientWidth;
         const height = container.clientHeight;
-        
         camera.aspect = width / height;
         camera.updateProjectionMatrix();
-        
         renderer.setSize(width, height);
     });
 
@@ -182,19 +180,28 @@ export function initAlarmcentraleAnimation(containerId) {
         requestAnimationFrame(animate);
         time += 0.002;
 
-        // Pulse Animation (New Premium Feature)
-        // Heartbeat pattern: small pulses
-        const pulseScale = 1 + Math.sin(time * 3) * 0.05;
+        // 1. Pulse (Slower, smooth breathing)
+        const pulseScale = 1 + Math.sin(time * 2.5) * 0.08;
         centralNode.scale.set(pulseScale, pulseScale, pulseScale);
+        // Halo pulses slightly differently
+        const haloScale = 1 + Math.sin(time * 2.5 - 0.5) * 0.05;
+        haloNode.scale.set(haloScale, haloScale, haloScale);
 
-        // Gentle sway
-        mainGroup.rotation.y = Math.sin(time * 0.1) * 0.1;
-        mainGroup.rotation.x = Math.cos(time * 0.05) * 0.05;
+        // 2. Parallax / Mouse Interaction (Smooth damping)
+        targetRotationY = mouseX;
+        targetRotationX = mouseY;
+        
+        // Auto gentle sway + Mouse influence
+        mainGroup.rotation.y += (targetRotationY - mainGroup.rotation.y) * 0.05;
+        mainGroup.rotation.x += (targetRotationX - mainGroup.rotation.x) * 0.05;
+        
+        // Add constant gentle sway on top
+        mainGroup.rotation.y += Math.sin(time * 0.1) * 0.001; 
 
-        // Rotate background particles slowly for depth
+        // 3. Background rotation
         particleSystem.rotation.y = time * 0.02;
 
-        // Organic node movement
+        // 4. Organic node movement
         satellites.forEach(sat => {
             const ox = sat.userData.offset.x;
             const oy = sat.userData.offset.y;
@@ -218,7 +225,6 @@ export function initAlarmcentraleAnimation(containerId) {
     return { scene, camera, renderer };
 }
 
-// Auto-init if running directly (for local testing)
 if (typeof window !== 'undefined') {
     const scriptTag = document.querySelector('script[src*="alarmcentrale.js"]');
     if (scriptTag) {
