@@ -11,8 +11,7 @@ export function initAlarmcentraleAnimation(containerId) {
     const config = {
         color: 0xadadad,
         particleCount: 20,
-        radius: 30,
-        connectionDistance: 15,
+        radius: 45, // Increased radius for more spread
         centralNodeSize: 2.5,
         satelliteNodeSize: 0.6,
         lineOpacity: 0.4
@@ -58,7 +57,7 @@ export function initAlarmcentraleAnimation(containerId) {
         // Random position on a sphere surface (or volume)
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.acos((Math.random() * 2) - 1);
-        const r = 15 + Math.random() * (config.radius - 15); // Keep them somewhat away from center
+        const r = 20 + Math.random() * (config.radius - 20); // Keep them somewhat away from center
 
         node.position.x = r * Math.sin(phi) * Math.cos(theta);
         node.position.y = r * Math.sin(phi) * Math.sin(theta);
@@ -67,52 +66,50 @@ export function initAlarmcentraleAnimation(containerId) {
         // Store initial position for animation
         node.userData = {
             originalPos: node.position.clone(),
-            velocity: new THREE.Vector3(
-                (Math.random() - 0.5) * 0.05,
-                (Math.random() - 0.5) * 0.05,
-                (Math.random() - 0.5) * 0.05
-            ),
-            phase: Math.random() * Math.PI * 2
+            phase: Math.random() * Math.PI * 2,
+            neighbors: [] // Store indices of connected neighbors
         };
 
         satellites.push(node);
         mainGroup.add(node);
     }
 
-    // 3. Lines
-    // We will update lines in the animation loop, but we need geometry for them
-    // Better approach for dynamic lines: create line segments every frame or use a large buffer
-    // For simplicity with ~20 nodes, we can recreate geometry or update positions
-    // Let's use a pre-allocated LineSegments for performance if we had many, 
-    // but for <100 lines, individual Line objects or a single LineSegments geometry updated every frame is fine.
-    // Let's go with updating a BufferGeometry for LineSegments.
+    // Pre-calculate fixed neighbors for each satellite (2 neighbors each)
+    satellites.forEach((sat, index) => {
+        // Find 2 closest neighbors to connect to permanently
+        const distances = satellites.map((other, otherIndex) => {
+            if (index === otherIndex) return { index: -1, dist: Infinity };
+            return { 
+                index: otherIndex, 
+                dist: sat.position.distanceTo(other.position) 
+            };
+        }).sort((a, b) => a.dist - b.dist);
 
-    // Max possible connections: (n*(n-1)/2) + n (center connections)
-    // Actually, let's just draw them.
+        // Take top 2 closest
+        sat.userData.neighbors = [distances[0].index, distances[1].index];
+    });
+
+    // 3. Lines
     const lineGeometry = new THREE.BufferGeometry();
     const lineSegments = new THREE.LineSegments(lineGeometry, lineMaterial);
     mainGroup.add(lineSegments);
 
     function updateConnections() {
         const positions = [];
-
-        // Connect satellites to center
         const centerPos = centralNode.position;
-        satellites.forEach(sat => {
+
+        satellites.forEach((sat) => {
+            // 1. Always connect to center
             positions.push(centerPos.x, centerPos.y, centerPos.z);
             positions.push(sat.position.x, sat.position.y, sat.position.z);
-        });
 
-        // Connect satellites to each other
-        for (let i = 0; i < satellites.length; i++) {
-            for (let j = i + 1; j < satellites.length; j++) {
-                const dist = satellites[i].position.distanceTo(satellites[j].position);
-                if (dist < config.connectionDistance) {
-                    positions.push(satellites[i].position.x, satellites[i].position.y, satellites[i].position.z);
-                    positions.push(satellites[j].position.x, satellites[j].position.y, satellites[j].position.z);
-                }
-            }
-        }
+            // 2. Always connect to pre-assigned neighbors
+            sat.userData.neighbors.forEach(neighborIndex => {
+                const neighbor = satellites[neighborIndex];
+                positions.push(sat.position.x, sat.position.y, sat.position.z);
+                positions.push(neighbor.position.x, neighbor.position.y, neighbor.position.z);
+            });
+        });
 
         lineGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     }
