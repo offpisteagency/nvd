@@ -132,19 +132,8 @@ export function initAlarmcentraleAnimation(containerId) {
     mainGroup.add(lineSegments);
 
 
-    // Mouse Parallax State
-    let mouseX = 0;
-    let mouseY = 0;
-    let targetRotationX = 0;
-    let targetRotationY = 0;
-
-    document.addEventListener('mousemove', (event) => {
-        const windowHalfX = window.innerWidth / 2;
-        const windowHalfY = window.innerHeight / 2;
-        mouseX = (event.clientX - windowHalfX) * 0.0001;
-        mouseY = (event.clientY - windowHalfY) * 0.0001;
-    });
-
+    // Mouse Parallax State (REMOVED)
+    
     // Function to update camera distance based on screen width
     function updateCameraPosition() {
         const width = window.innerWidth;
@@ -183,17 +172,11 @@ export function initAlarmcentraleAnimation(containerId) {
 
         // Smooth infinite loop rotation (Continuous Spin)
         // Increment rotation continuously for infinite loop
-        mainGroup.rotation.y += 0.0015; // Constant smooth spin
-        mainGroup.rotation.x += 0.0005; // Slight tilt rotation
-
-        // Mouse Interaction (Tilts the whole sphere)
-        targetRotationY += (mouseX - targetRotationY) * 0.05;
-        targetRotationX += (mouseY - targetRotationX) * 0.05;
+        // Y-axis spin (Globe style) - Subtle
+        mainGroup.rotation.y += 0.002; 
         
-        // Apply mouse influence on top of continuous auto rotation
-        // We add the mouse offset to the current auto-rotation state
-        mainGroup.rotation.y += targetRotationY * 0.05; 
-        mainGroup.rotation.x += targetRotationX * 0.05;
+        // Optional: Very slight X tilt/wobble if desired, but keeping it clean to Y-axis per request
+        // mainGroup.rotation.x = Math.sin(time * 0.5) * 0.1; 
 
         // Background subtle rotation
         particleSystem.rotation.y = -time * 0.02;
