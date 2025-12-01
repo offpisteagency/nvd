@@ -14,8 +14,8 @@ export function initAlarmcentraleAnimation(containerId) {
         radius: 45,
         centralNodeSize: 2.5,
         satelliteNodeSize: 0.6,
-        lineOpacity: 0.4,
-        maxVerticalSpread: 30 // Constrain vertical spread to keep within canvas
+        lineOpacity: 0.3, // Reduced opacity for subtler lines
+        maxVerticalSpread: 30
     };
 
     // Scene setup
@@ -29,14 +29,39 @@ export function initAlarmcentraleAnimation(containerId) {
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    
+    // Enable shadow map for depth
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    
     container.appendChild(renderer.domElement);
+
+    // Lighting (New Premium Feature)
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); // Soft fill
+    scene.add(ambientLight);
+
+    const mainLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    mainLight.position.set(10, 20, 30);
+    scene.add(mainLight);
+
+    const pointLight = new THREE.PointLight(0xffffff, 0.5, 100);
+    pointLight.position.set(-10, -10, 20);
+    scene.add(pointLight);
 
     // Group to hold everything
     const mainGroup = new THREE.Group();
     scene.add(mainGroup);
 
-    // Materials
-    const nodeMaterial = new THREE.MeshBasicMaterial({ color: config.color });
+    // Materials (New Premium Feature)
+    // MeshPhysicalMaterial for high-end look (roughness/metalness)
+    const nodeMaterial = new THREE.MeshPhysicalMaterial({ 
+        color: config.color,
+        metalness: 0.1,
+        roughness: 0.4,
+        clearcoat: 0.8,
+        clearcoatRoughness: 0.2
+    });
+
     const lineMaterial = new THREE.LineBasicMaterial({ 
         color: config.color, 
         transparent: true, 
@@ -44,13 +69,13 @@ export function initAlarmcentraleAnimation(containerId) {
     });
 
     // 1. Central Node
-    const centralGeometry = new THREE.SphereGeometry(config.centralNodeSize, 32, 32);
+    const centralGeometry = new THREE.SphereGeometry(config.centralNodeSize, 64, 64); // Higher poly for smooth shading
     const centralNode = new THREE.Mesh(centralGeometry, nodeMaterial);
     mainGroup.add(centralNode);
 
     // 2. Satellite Nodes
     const satellites = [];
-    const satelliteGeometry = new THREE.SphereGeometry(config.satelliteNodeSize, 16, 16);
+    const satelliteGeometry = new THREE.SphereGeometry(config.satelliteNodeSize, 32, 32); // Higher poly
 
     for (let i = 0; i < config.particleCount; i++) {
         const node = new THREE.Mesh(satelliteGeometry, nodeMaterial);
@@ -59,15 +84,12 @@ export function initAlarmcentraleAnimation(containerId) {
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.acos((Math.random() * 2) - 1);
         
-        // More spread in X/Z, less in Y (vertical)
         const rBase = 20 + Math.random() * (config.radius - 20);
         
-        // Calculate position based on spherical coords but flatten Y
         let x = rBase * Math.sin(phi) * Math.cos(theta);
         let y = rBase * Math.sin(phi) * Math.sin(theta);
         let z = rBase * Math.cos(phi);
         
-        // Constrain Y heavily
         y = Math.max(Math.min(y, config.maxVerticalSpread), -config.maxVerticalSpread) * 0.6;
 
         node.position.set(x, y, z);
@@ -75,18 +97,40 @@ export function initAlarmcentraleAnimation(containerId) {
         // Store initial position for animation
         node.userData = {
             originalPos: node.position.clone(),
-            // Use perlin-like offsets for organic movement
             offset: new THREE.Vector3(Math.random()*100, Math.random()*100, Math.random()*100),
-            speed: 0.0005 + Math.random() * 0.001 // Very slow individual speed
         };
 
         satellites.push(node);
         mainGroup.add(node);
     }
 
+    // Background Particles (New Premium Feature: Depth)
+    const particlesGeometry = new THREE.BufferGeometry();
+    const particleCount = 50;
+    const particlePositions = new Float32Array(particleCount * 3);
+
+    for(let i = 0; i < particleCount * 3; i += 3) {
+        // Spread wide in background
+        particlePositions[i] = (Math.random() - 0.5) * 200; // x
+        particlePositions[i+1] = (Math.random() - 0.5) * 100; // y
+        particlePositions[i+2] = (Math.random() - 0.5) * 100 - 20; // z (behind)
+    }
+
+    particlesGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+    const particlesMaterial = new THREE.PointsMaterial({
+        color: 0xadadad,
+        size: 0.3,
+        transparent: true,
+        opacity: 0.2, // Very faint
+        sizeAttenuation: true
+    });
+
+    const particleSystem = new THREE.Points(particlesGeometry, particlesMaterial);
+    scene.add(particleSystem);
+
+
     // Pre-calculate fixed neighbors for each satellite (2 neighbors each)
     satellites.forEach((sat, index) => {
-        // Find 2 closest neighbors to connect to permanently
         const distances = satellites.map((other, otherIndex) => {
             if (index === otherIndex) return { index: -1, dist: Infinity };
             return { 
@@ -95,7 +139,6 @@ export function initAlarmcentraleAnimation(containerId) {
             };
         }).sort((a, b) => a.dist - b.dist);
 
-        // Take top 2 closest
         sat.userData.neighbors = [distances[0].index, distances[1].index];
     });
 
@@ -109,11 +152,9 @@ export function initAlarmcentraleAnimation(containerId) {
         const centerPos = centralNode.position;
 
         satellites.forEach((sat) => {
-            // 1. Always connect to center
             positions.push(centerPos.x, centerPos.y, centerPos.z);
             positions.push(sat.position.x, sat.position.y, sat.position.z);
 
-            // 2. Always connect to pre-assigned neighbors
             sat.userData.neighbors.forEach(neighborIndex => {
                 const neighbor = satellites[neighborIndex];
                 positions.push(sat.position.x, sat.position.y, sat.position.z);
@@ -139,23 +180,28 @@ export function initAlarmcentraleAnimation(containerId) {
     let time = 0;
     function animate() {
         requestAnimationFrame(animate);
-        time += 0.002; // Slowed down global time
+        time += 0.002;
 
-        // Very slow rotation of the entire group
-        mainGroup.rotation.y = Math.sin(time * 0.1) * 0.1; // Gentle sway instead of full spin
+        // Pulse Animation (New Premium Feature)
+        // Heartbeat pattern: small pulses
+        const pulseScale = 1 + Math.sin(time * 3) * 0.05;
+        centralNode.scale.set(pulseScale, pulseScale, pulseScale);
+
+        // Gentle sway
+        mainGroup.rotation.y = Math.sin(time * 0.1) * 0.1;
         mainGroup.rotation.x = Math.cos(time * 0.05) * 0.05;
 
-        // Organic "breathing" animation
+        // Rotate background particles slowly for depth
+        particleSystem.rotation.y = time * 0.02;
+
+        // Organic node movement
         satellites.forEach(sat => {
-            // Noise-like organic movement using sine waves with different frequencies
-            // This creates a non-repetitive floating effect
             const ox = sat.userData.offset.x;
             const oy = sat.userData.offset.y;
             const oz = sat.userData.offset.z;
 
-            // Gentle deviation from original position
             const floatX = Math.sin(time + ox) * 2;
-            const floatY = Math.cos(time * 0.8 + oy) * 1.5; // Less vertical float
+            const floatY = Math.cos(time * 0.8 + oy) * 1.5;
             const floatZ = Math.sin(time * 0.5 + oz) * 2;
 
             sat.position.x = sat.userData.originalPos.x + floatX;
