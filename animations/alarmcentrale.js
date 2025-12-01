@@ -11,10 +11,11 @@ export function initAlarmcentraleAnimation(containerId) {
     const config = {
         color: 0xadadad,
         particleCount: 20,
-        radius: 45, // Increased radius for more spread
+        radius: 45,
         centralNodeSize: 2.5,
         satelliteNodeSize: 0.6,
-        lineOpacity: 0.4
+        lineOpacity: 0.4,
+        maxVerticalSpread: 30 // Constrain vertical spread to keep within canvas
     };
 
     // Scene setup
@@ -54,20 +55,29 @@ export function initAlarmcentraleAnimation(containerId) {
     for (let i = 0; i < config.particleCount; i++) {
         const node = new THREE.Mesh(satelliteGeometry, nodeMaterial);
         
-        // Random position on a sphere surface (or volume)
+        // Random position - Flatter distribution (ellipsoid-like)
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.acos((Math.random() * 2) - 1);
-        const r = 20 + Math.random() * (config.radius - 20); // Keep them somewhat away from center
+        
+        // More spread in X/Z, less in Y (vertical)
+        const rBase = 20 + Math.random() * (config.radius - 20);
+        
+        // Calculate position based on spherical coords but flatten Y
+        let x = rBase * Math.sin(phi) * Math.cos(theta);
+        let y = rBase * Math.sin(phi) * Math.sin(theta);
+        let z = rBase * Math.cos(phi);
+        
+        // Constrain Y heavily
+        y = Math.max(Math.min(y, config.maxVerticalSpread), -config.maxVerticalSpread) * 0.6;
 
-        node.position.x = r * Math.sin(phi) * Math.cos(theta);
-        node.position.y = r * Math.sin(phi) * Math.sin(theta);
-        node.position.z = r * Math.cos(phi);
+        node.position.set(x, y, z);
 
         // Store initial position for animation
         node.userData = {
             originalPos: node.position.clone(),
-            phase: Math.random() * Math.PI * 2,
-            neighbors: [] // Store indices of connected neighbors
+            // Use perlin-like offsets for organic movement
+            offset: new THREE.Vector3(Math.random()*100, Math.random()*100, Math.random()*100),
+            speed: 0.0005 + Math.random() * 0.001 // Very slow individual speed
         };
 
         satellites.push(node);
@@ -129,18 +139,28 @@ export function initAlarmcentraleAnimation(containerId) {
     let time = 0;
     function animate() {
         requestAnimationFrame(animate);
-        time += 0.005;
+        time += 0.002; // Slowed down global time
 
-        // Rotate entire group slowly
-        mainGroup.rotation.y += 0.001;
-        mainGroup.rotation.x += 0.0005;
+        // Very slow rotation of the entire group
+        mainGroup.rotation.y = Math.sin(time * 0.1) * 0.1; // Gentle sway instead of full spin
+        mainGroup.rotation.x = Math.cos(time * 0.05) * 0.05;
 
-        // Animate satellites (float)
+        // Organic "breathing" animation
         satellites.forEach(sat => {
-            // Simple floating motion around original position
-            sat.position.x = sat.userData.originalPos.x + Math.sin(time + sat.userData.phase) * 2;
-            sat.position.y = sat.userData.originalPos.y + Math.cos(time + sat.userData.phase * 0.5) * 2;
-            sat.position.z = sat.userData.originalPos.z + Math.sin(time * 0.8 + sat.userData.phase) * 2;
+            // Noise-like organic movement using sine waves with different frequencies
+            // This creates a non-repetitive floating effect
+            const ox = sat.userData.offset.x;
+            const oy = sat.userData.offset.y;
+            const oz = sat.userData.offset.z;
+
+            // Gentle deviation from original position
+            const floatX = Math.sin(time + ox) * 2;
+            const floatY = Math.cos(time * 0.8 + oy) * 1.5; // Less vertical float
+            const floatZ = Math.sin(time * 0.5 + oz) * 2;
+
+            sat.position.x = sat.userData.originalPos.x + floatX;
+            sat.position.y = sat.userData.originalPos.y + floatY;
+            sat.position.z = sat.userData.originalPos.z + floatZ;
         });
 
         updateConnections();
