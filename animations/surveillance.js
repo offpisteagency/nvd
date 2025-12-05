@@ -11,9 +11,9 @@ export function initSurveillanceAnimation(containerId) {
     const config = {
         color: 0xadadad,
         particleCount: 25000, // Dense for 3D surface
-        sphereRadius: 50, // Eyeball sphere radius
-        pupilAngle: 0.35, // Pupil size (in radians from center)
-        irisAngle: 1.2, // Iris coverage (in radians from center)
+        sphereRadius: 38, // Smaller eyeball sphere radius
+        pupilAngle: 0.22, // Smaller pupil (in radians from center)
+        irisAngle: 1.1, // Iris coverage (in radians from center)
         edgeFade: 8,
     };
 
