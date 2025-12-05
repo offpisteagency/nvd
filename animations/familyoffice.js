@@ -83,6 +83,7 @@ export function initFamilyOfficeAnimation(containerId) {
     const lockTop = bodyTopY + config.shackleLegsHeight + config.shackleRadius;
     const lockBottom = -config.bodyHeight / 2;
     const lockTotalHeight = lockTop - lockBottom;
+    const lockCenterY = (lockTop + lockBottom) / 2; // Center point to shift everything to y=0
 
     for (let i = 0; i < config.particleCount; i++) {
         let x, y, z;
@@ -167,13 +168,14 @@ export function initFamilyOfficeAnimation(containerId) {
             z = tubeOffsetZ;
         }
 
+        // Center the lock vertically (shift down by center offset)
         positions[i * 3] = x;
-        positions[i * 3 + 1] = y;
+        positions[i * 3 + 1] = y - lockCenterY;
         positions[i * 3 + 2] = z;
         
         // Store original positions
         originalPositions[i * 3] = x;
-        originalPositions[i * 3 + 1] = y;
+        originalPositions[i * 3 + 1] = y - lockCenterY;
         originalPositions[i * 3 + 2] = z;
         
         // Random offsets for organic floating
@@ -183,13 +185,12 @@ export function initFamilyOfficeAnimation(containerId) {
         floatSpeeds[i] = 0.3 + Math.random() * 0.7;
 
         // Calculate base opacity based on Y position (gradient: bright top, dark bottom)
+        // Use the original y (before centering) for gradient calculation
         const normalizedY = (y - lockBottom) / lockTotalHeight; // 0 at bottom, 1 at top
         const gradientOpacity = 0.15 + normalizedY * 0.85; // Range: 0.15 to 1.0
         
-        // Slight depth-based opacity
-        const depthFade = 0.7 + (z / config.bodyDepth + 0.5) * 0.3;
-        
-        opacities[i] = gradientOpacity * depthFade;
+        // Consistent opacity for all parts (no depth variation to keep shackle same as body)
+        opacities[i] = gradientOpacity;
         sizes[i] = 1.0 + Math.random() * 0.5;
     }
 
