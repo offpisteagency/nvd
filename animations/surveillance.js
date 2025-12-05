@@ -10,10 +10,11 @@ export function initSurveillanceAnimation(containerId) {
     // Configuration
     const config = {
         color: 0xadadad,
-        particleCount: 20000, // Increased slightly to fill the center
-        innerRadius: 15, // Pupil size
-        outerRadius: 45, // Outer edge of iris
-        edgeFade: 8, // How much the edges fade out
+        particleCount: 25000, // Dense for 3D surface
+        sphereRadius: 50, // Eyeball sphere radius
+        pupilAngle: 0.35, // Pupil size (in radians from center)
+        irisAngle: 1.2, // Iris coverage (in radians from center)
+        edgeFade: 8,
     };
 
     // Scene setup
@@ -45,15 +46,18 @@ export function initSurveillanceAnimation(containerId) {
     const floatSpeeds = new Float32Array(config.particleCount); // Random speeds
 
     for (let i = 0; i < config.particleCount; i++) {
-        // Distribute in a full disc (flat on XY plane)
-        const angle = Math.random() * Math.PI * 2;
+        // Distribute on hemisphere surface (3D eyeball shape)
+        // Using spherical coordinates: theta (around), phi (from pole)
+        const theta = Math.random() * Math.PI * 2; // Full rotation
         
-        // Use sqrt for uniform distribution in disc (0 to outerRadius)
-        const r = Math.sqrt(Math.random()) * config.outerRadius;
+        // Phi from 0 (front center) to irisAngle (edge of visible iris)
+        // Use sqrt for uniform distribution on sphere surface
+        const phi = Math.acos(1 - Math.random() * (1 - Math.cos(config.irisAngle)));
         
-        const x = Math.cos(angle) * r;
-        const y = Math.sin(angle) * r;
-        const z = (Math.random() - 0.5) * 3; // Slight depth variation
+        // Convert to Cartesian (z pointing toward viewer)
+        const x = config.sphereRadius * Math.sin(phi) * Math.cos(theta);
+        const y = config.sphereRadius * Math.sin(phi) * Math.sin(theta);
+        const z = config.sphereRadius * Math.cos(phi); // Front of sphere
 
         positions[i * 3] = x;
         positions[i * 3 + 1] = y;
@@ -71,22 +75,19 @@ export function initSurveillanceAnimation(containerId) {
         floatSpeeds[i] = 0.3 + Math.random() * 0.7;
 
         // Calculate base opacity based on Y position (gradient: bright top, dark bottom)
-        // Normalize y to -1 to 1 range
-        const normalizedY = y / config.outerRadius;
-        // Map to opacity: top (y=1) = bright, bottom (y=-1) = dark
-        const gradientOpacity = 0.15 + (normalizedY + 1) * 0.425; // Range: 0.15 to 1.0
+        const normalizedY = y / (config.sphereRadius * Math.sin(config.irisAngle));
+        const gradientOpacity = 0.2 + (normalizedY + 1) * 0.4; // Range: 0.2 to 1.0
         
-        // Fade outer edge only (static)
-        const distFromCenter = r;
+        // Fade outer edge (particles near iris edge)
+        const edgeFadeStart = config.irisAngle - 0.3;
         let edgeFade = 1.0;
-        
-        if (distFromCenter > config.outerRadius - config.edgeFade) {
-            edgeFade *= (config.outerRadius - distFromCenter) / config.edgeFade;
+        if (phi > edgeFadeStart) {
+            edgeFade = 1.0 - (phi - edgeFadeStart) / (config.irisAngle - edgeFadeStart);
         }
         edgeFade = Math.max(0, Math.min(1, edgeFade));
         
         opacities[i] = gradientOpacity * edgeFade;
-        sizes[i] = 1.0 + Math.random() * 0.5; // Slightly larger particles
+        sizes[i] = 1.0 + Math.random() * 0.5;
     }
 
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -98,31 +99,39 @@ export function initSurveillanceAnimation(containerId) {
         uniforms: {
             color: { value: new THREE.Color(config.color) },
             pointSize: { value: 2.0 },
-            pupilPos: { value: new THREE.Vector2(0, 0) },
-            pupilRadius: { value: config.innerRadius },
-            edgeFade: { value: config.edgeFade }
+            pupilPos: { value: new THREE.Vector3(0, 0, config.sphereRadius) },
+            pupilAngle: { value: config.pupilAngle },
+            sphereRadius: { value: config.sphereRadius }
         },
         vertexShader: `
             attribute float opacity;
             attribute float size;
             varying float vOpacity;
+            varying float vDepth;
             uniform float pointSize;
-            uniform vec2 pupilPos;
-            uniform float pupilRadius;
-            uniform float edgeFade;
+            uniform vec3 pupilPos;
+            uniform float pupilAngle;
+            uniform float sphereRadius;
             
             void main() {
-                // Calculate distance from particle to dynamic pupil position
-                float distToPupil = distance(position.xy, pupilPos);
+                // Calculate angle from pupil center (in 3D)
+                vec3 particleDir = normalize(position);
+                vec3 pupilDir = normalize(pupilPos);
+                float angleToPupil = acos(clamp(dot(particleDir, pupilDir), -1.0, 1.0));
                 
-                // Create dynamic hole (pupil)
-                float pupilMask = smoothstep(pupilRadius, pupilRadius + edgeFade, distToPupil);
+                // Create dynamic hole (pupil) based on angular distance
+                float pupilMask = smoothstep(pupilAngle, pupilAngle + 0.15, angleToPupil);
                 
                 // Combine static opacity with dynamic pupil mask
                 vOpacity = opacity * pupilMask;
                 
+                // Pass depth for size attenuation
                 vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-                gl_PointSize = size * pointSize * (300.0 / -mvPosition.z);
+                vDepth = -mvPosition.z;
+                
+                // Size varies slightly with depth for 3D feel
+                float depthScale = 250.0 / vDepth;
+                gl_PointSize = size * pointSize * depthScale;
                 gl_Position = projectionMatrix * mvPosition;
             }
         `,
@@ -150,20 +159,27 @@ export function initSurveillanceAnimation(containerId) {
     mainGroup.add(irisParticles);
 
     // Mouse interaction
-    const targetPupilPos = { x: 0, y: 0 };
-    const currentPupilPos = { x: 0, y: 0 };
+    const targetLook = { x: 0, y: 0 };
+    const currentLook = { x: 0, y: 0 };
+    const targetRotation = { x: 0, y: 0 };
+    const currentRotation = { x: 0, y: 0 };
     
-    const maxLookDistance = 6; // Pupil moving inside eye
-    const smoothing = 0.03;
+    const maxLookAngle = 0.25; // How far the pupil can move (radians)
+    const maxRotation = 0.08; // Subtle rotation of entire eye
+    const smoothing = 0.025; // Smooth and organic
 
     window.addEventListener('mousemove', (event) => {
         // Normalize mouse position to -1 to 1
         const mouseX = (event.clientX / window.innerWidth) * 2 - 1;
         const mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
         
-        // Set target pupil position
-        targetPupilPos.x = mouseX * maxLookDistance;
-        targetPupilPos.y = mouseY * maxLookDistance;
+        // Target for pupil look direction
+        targetLook.x = mouseX * maxLookAngle;
+        targetLook.y = mouseY * maxLookAngle;
+        
+        // Target for subtle eye rotation (adds 3D depth feel)
+        targetRotation.x = -mouseY * maxRotation;
+        targetRotation.y = mouseX * maxRotation;
     });
 
     // Handle resize
@@ -196,12 +212,23 @@ export function initSurveillanceAnimation(containerId) {
         requestAnimationFrame(animate);
         time += 0.008;
 
-        // Smooth movement for pupil
-        currentPupilPos.x += (targetPupilPos.x - currentPupilPos.x) * smoothing;
-        currentPupilPos.y += (targetPupilPos.y - currentPupilPos.y) * smoothing;
+        // Smooth movement for pupil look direction
+        currentLook.x += (targetLook.x - currentLook.x) * smoothing;
+        currentLook.y += (targetLook.y - currentLook.y) * smoothing;
         
-        // Update uniform
-        material.uniforms.pupilPos.value.set(currentPupilPos.x, currentPupilPos.y);
+        // Smooth rotation for 3D effect
+        currentRotation.x += (targetRotation.x - currentRotation.x) * smoothing;
+        currentRotation.y += (targetRotation.y - currentRotation.y) * smoothing;
+        
+        // Calculate pupil position on sphere surface based on look direction
+        const pupilX = config.sphereRadius * Math.sin(currentLook.x);
+        const pupilY = config.sphereRadius * Math.sin(currentLook.y);
+        const pupilZ = config.sphereRadius * Math.cos(Math.sqrt(currentLook.x * currentLook.x + currentLook.y * currentLook.y));
+        material.uniforms.pupilPos.value.set(pupilX, pupilY, pupilZ);
+        
+        // Apply subtle rotation to the whole eye (3D depth feel)
+        mainGroup.rotation.x = currentRotation.x;
+        mainGroup.rotation.y = currentRotation.y;
 
         // Subtle organic floating movement for each particle
         for (let i = 0; i < config.particleCount; i++) {
@@ -211,11 +238,11 @@ export function initSurveillanceAnimation(containerId) {
             const oz = floatOffsets[i * 3 + 2];
             
             // Visible floating displacement - organic drifting motion
-            const dx = Math.sin(time * speed + ox) * 0.6;
-            const dy = Math.sin(time * speed * 0.8 + oy) * 0.6;
+            const dx = Math.sin(time * speed + ox) * 0.5;
+            const dy = Math.sin(time * speed * 0.8 + oy) * 0.5;
             const dz = Math.sin(time * speed * 0.6 + oz) * 0.3;
             
-            // Apply floating only (no eye shift)
+            // Apply floating
             positionAttribute.array[i * 3] = originalPositions[i * 3] + dx;
             positionAttribute.array[i * 3 + 1] = originalPositions[i * 3 + 1] + dy;
             positionAttribute.array[i * 3 + 2] = originalPositions[i * 3 + 2] + dz;
@@ -238,3 +265,4 @@ if (typeof window !== 'undefined') {
         });
     }
 }
+
