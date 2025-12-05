@@ -10,8 +10,8 @@ export function initSurveillanceAnimation(containerId) {
     // Configuration
     const config = {
         color: 0xadadad,
-        particleCount: 15000, // Reduced for visible movement
-        innerRadius: 15, // Pupil hole
+        particleCount: 20000, // Increased slightly to fill the center
+        innerRadius: 15, // Pupil size
         outerRadius: 45, // Outer edge of iris
         edgeFade: 8, // How much the edges fade out
     };
@@ -45,12 +45,11 @@ export function initSurveillanceAnimation(containerId) {
     const floatSpeeds = new Float32Array(config.particleCount); // Random speeds
 
     for (let i = 0; i < config.particleCount; i++) {
-        // Distribute in a ring/annulus shape (flat on XY plane)
+        // Distribute in a full disc (flat on XY plane)
         const angle = Math.random() * Math.PI * 2;
         
-        // Use sqrt for uniform distribution in disc
-        const minR = config.innerRadius / config.outerRadius;
-        const r = Math.sqrt(minR * minR + Math.random() * (1 - minR * minR)) * config.outerRadius;
+        // Use sqrt for uniform distribution in disc (0 to outerRadius)
+        const r = Math.sqrt(Math.random()) * config.outerRadius;
         
         const x = Math.cos(angle) * r;
         const y = Math.sin(angle) * r;
@@ -71,21 +70,16 @@ export function initSurveillanceAnimation(containerId) {
         floatOffsets[i * 3 + 2] = Math.random() * Math.PI * 2;
         floatSpeeds[i] = 0.3 + Math.random() * 0.7;
 
-        // Calculate opacity based on Y position (gradient: bright top, dark bottom)
+        // Calculate base opacity based on Y position (gradient: bright top, dark bottom)
         // Normalize y to -1 to 1 range
         const normalizedY = y / config.outerRadius;
         // Map to opacity: top (y=1) = bright, bottom (y=-1) = dark
         const gradientOpacity = 0.15 + (normalizedY + 1) * 0.425; // Range: 0.15 to 1.0
         
-        // Also fade edges (inner and outer)
+        // Fade outer edge only (static)
         const distFromCenter = r;
         let edgeFade = 1.0;
         
-        // Fade near inner edge (pupil)
-        if (distFromCenter < config.innerRadius + config.edgeFade) {
-            edgeFade *= (distFromCenter - config.innerRadius) / config.edgeFade;
-        }
-        // Fade near outer edge
         if (distFromCenter > config.outerRadius - config.edgeFade) {
             edgeFade *= (config.outerRadius - distFromCenter) / config.edgeFade;
         }
@@ -99,20 +93,34 @@ export function initSurveillanceAnimation(containerId) {
     geometry.setAttribute('opacity', new THREE.BufferAttribute(opacities, 1));
     geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
 
-    // Custom shader material for per-particle opacity
+    // Custom shader material for per-particle opacity and dynamic pupil masking
     const material = new THREE.ShaderMaterial({
         uniforms: {
             color: { value: new THREE.Color(config.color) },
-            pointSize: { value: 2.0 }
+            pointSize: { value: 2.0 },
+            pupilPos: { value: new THREE.Vector2(0, 0) },
+            pupilRadius: { value: config.innerRadius },
+            edgeFade: { value: config.edgeFade }
         },
         vertexShader: `
             attribute float opacity;
             attribute float size;
             varying float vOpacity;
             uniform float pointSize;
+            uniform vec2 pupilPos;
+            uniform float pupilRadius;
+            uniform float edgeFade;
             
             void main() {
-                vOpacity = opacity;
+                // Calculate distance from particle to dynamic pupil position
+                float distToPupil = distance(position.xy, pupilPos);
+                
+                // Create dynamic hole (pupil)
+                float pupilMask = smoothstep(pupilRadius, pupilRadius + edgeFade, distToPupil);
+                
+                // Combine static opacity with dynamic pupil mask
+                vOpacity = opacity * pupilMask;
+                
                 vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
                 gl_PointSize = size * pointSize * (300.0 / -mvPosition.z);
                 gl_Position = projectionMatrix * mvPosition;
@@ -142,19 +150,19 @@ export function initSurveillanceAnimation(containerId) {
     mainGroup.add(irisParticles);
 
     // Mouse interaction - pupil follows cursor
-    const targetOffset = { x: 0, y: 0 };
-    const currentOffset = { x: 0, y: 0 };
-    const mouseInfluence = 2; // How much the pupil shifts (subtle)
-    const smoothing = 0.04; // How smoothly it follows (lower = smoother)
+    const targetPupilPos = { x: 0, y: 0 };
+    const currentPupilPos = { x: 0, y: 0 };
+    const maxLookDistance = 15; // Max distance pupil can travel from center
+    const smoothing = 0.08; // How smoothly it follows
 
     window.addEventListener('mousemove', (event) => {
         // Normalize mouse position to -1 to 1
         const mouseX = (event.clientX / window.innerWidth) * 2 - 1;
         const mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
         
-        // Set target offset based on mouse position
-        targetOffset.x = mouseX * mouseInfluence;
-        targetOffset.y = mouseY * mouseInfluence;
+        // Set target pupil position
+        targetPupilPos.x = mouseX * maxLookDistance;
+        targetPupilPos.y = mouseY * maxLookDistance;
     });
 
     // Handle resize
@@ -187,11 +195,14 @@ export function initSurveillanceAnimation(containerId) {
         requestAnimationFrame(animate);
         time += 0.008;
 
-        // Smooth pupil offset following mouse
-        currentOffset.x += (targetOffset.x - currentOffset.x) * smoothing;
-        currentOffset.y += (targetOffset.y - currentOffset.y) * smoothing;
+        // Smooth pupil movement
+        currentPupilPos.x += (targetPupilPos.x - currentPupilPos.x) * smoothing;
+        currentPupilPos.y += (targetPupilPos.y - currentPupilPos.y) * smoothing;
+        
+        // Update uniform
+        material.uniforms.pupilPos.value.set(currentPupilPos.x, currentPupilPos.y);
 
-        // Subtle organic floating movement for each particle + mouse offset
+        // Subtle organic floating movement for each particle
         for (let i = 0; i < config.particleCount; i++) {
             const speed = floatSpeeds[i];
             const ox = floatOffsets[i * 3];
@@ -203,9 +214,9 @@ export function initSurveillanceAnimation(containerId) {
             const dy = Math.sin(time * speed * 0.8 + oy) * 0.6;
             const dz = Math.sin(time * speed * 0.6 + oz) * 0.3;
             
-            // Apply floating + inverted mouse offset (pupil moves toward mouse)
-            positionAttribute.array[i * 3] = originalPositions[i * 3] + dx - currentOffset.x;
-            positionAttribute.array[i * 3 + 1] = originalPositions[i * 3 + 1] + dy - currentOffset.y;
+            // Apply floating only (no offset)
+            positionAttribute.array[i * 3] = originalPositions[i * 3] + dx;
+            positionAttribute.array[i * 3 + 1] = originalPositions[i * 3 + 1] + dy;
             positionAttribute.array[i * 3 + 2] = originalPositions[i * 3 + 2] + dz;
         }
         positionAttribute.needsUpdate = true;
