@@ -152,11 +152,8 @@ export function initSurveillanceAnimation(containerId) {
     // Mouse interaction
     const targetPupilPos = { x: 0, y: 0 };
     const currentPupilPos = { x: 0, y: 0 };
-    const targetEyeShift = { x: 0, y: 0 };
-    const currentEyeShift = { x: 0, y: 0 };
     
     const maxLookDistance = 6; // Pupil moving inside eye
-    const maxEyeShift = 4; // Entire eye shifting slightly
     const smoothing = 0.03;
 
     window.addEventListener('mousemove', (event) => {
@@ -164,12 +161,9 @@ export function initSurveillanceAnimation(containerId) {
         const mouseX = (event.clientX / window.innerWidth) * 2 - 1;
         const mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
         
-        // Set targets
+        // Set target pupil position
         targetPupilPos.x = mouseX * maxLookDistance;
         targetPupilPos.y = mouseY * maxLookDistance;
-        
-        targetEyeShift.x = mouseX * maxEyeShift;
-        targetEyeShift.y = mouseY * maxEyeShift;
     });
 
     // Handle resize
@@ -202,18 +196,12 @@ export function initSurveillanceAnimation(containerId) {
         requestAnimationFrame(animate);
         time += 0.008;
 
-        // Smooth movement for pupil and eye
+        // Smooth movement for pupil
         currentPupilPos.x += (targetPupilPos.x - currentPupilPos.x) * smoothing;
         currentPupilPos.y += (targetPupilPos.y - currentPupilPos.y) * smoothing;
         
-        currentEyeShift.x += (targetEyeShift.x - currentEyeShift.x) * smoothing;
-        currentEyeShift.y += (targetEyeShift.y - currentEyeShift.y) * smoothing;
-        
-        // Update uniform - pupil position needs to include the eye shift so it stays with the eye
-        material.uniforms.pupilPos.value.set(
-            currentPupilPos.x + currentEyeShift.x, 
-            currentPupilPos.y + currentEyeShift.y
-        );
+        // Update uniform
+        material.uniforms.pupilPos.value.set(currentPupilPos.x, currentPupilPos.y);
 
         // Subtle organic floating movement for each particle
         for (let i = 0; i < config.particleCount; i++) {
@@ -227,9 +215,9 @@ export function initSurveillanceAnimation(containerId) {
             const dy = Math.sin(time * speed * 0.8 + oy) * 0.6;
             const dz = Math.sin(time * speed * 0.6 + oz) * 0.3;
             
-            // Apply floating + eye shift (entire eye moves)
-            positionAttribute.array[i * 3] = originalPositions[i * 3] + dx + currentEyeShift.x;
-            positionAttribute.array[i * 3 + 1] = originalPositions[i * 3 + 1] + dy + currentEyeShift.y;
+            // Apply floating only (no eye shift)
+            positionAttribute.array[i * 3] = originalPositions[i * 3] + dx;
+            positionAttribute.array[i * 3 + 1] = originalPositions[i * 3 + 1] + dy;
             positionAttribute.array[i * 3 + 2] = originalPositions[i * 3 + 2] + dz;
         }
         positionAttribute.needsUpdate = true;
