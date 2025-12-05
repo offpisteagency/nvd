@@ -152,8 +152,8 @@ export function initSurveillanceAnimation(containerId) {
     // Mouse interaction - pupil follows cursor
     const targetPupilPos = { x: 0, y: 0 };
     const currentPupilPos = { x: 0, y: 0 };
-    const maxLookDistance = 15; // Max distance pupil can travel from center
-    const smoothing = 0.08; // How smoothly it follows
+    const maxLookDistance = 6; // Reduced distance for subtle movement
+    const smoothing = 0.03; // Lower = smoother/slower follow
 
     window.addEventListener('mousemove', (event) => {
         // Normalize mouse position to -1 to 1
