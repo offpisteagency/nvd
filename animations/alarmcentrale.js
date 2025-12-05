@@ -115,7 +115,12 @@ export function initAlarmcentraleAnimation(containerId) {
         const normalizedY = (yPos / config.sphereRadius + 1) / 2; // 0 at bottom, 1 at top
         const gradientOpacity = 0.15 + normalizedY * 0.85;
         
-        opacities[i] = gradientOpacity;
+        // Make center brighter (radial boost)
+        const distFromCenter = Math.sqrt(x * x + yPos * yPos + z * z);
+        const normalizedDist = distFromCenter / config.sphereRadius; // 0 at center, 1 at edge
+        const centerBoost = 1.0 - normalizedDist * 0.4; // Brighter near center (up to 40% boost)
+        
+        opacities[i] = gradientOpacity * (1.0 + centerBoost * 0.5); // Up to 50% brighter at center
         sizes[i] = 1.0 + Math.random() * 0.5;
     }
 
@@ -147,7 +152,12 @@ export function initAlarmcentraleAnimation(containerId) {
             const normalizedY = (y / config.sphereRadius + 1) / 2;
             const gradientOpacity = 0.1 + normalizedY * 0.5; // Lines slightly more transparent
             
-            opacities[lineIndex] = gradientOpacity;
+            // Center brightness boost for lines too
+            const distFromCenter = Math.sqrt(x * x + y * y + z * z);
+            const normalizedDist = distFromCenter / config.sphereRadius;
+            const centerBoost = 1.0 - normalizedDist * 0.3;
+            
+            opacities[lineIndex] = gradientOpacity * (1.0 + centerBoost * 0.4);
             sizes[lineIndex] = 0.8 + Math.random() * 0.3; // Slightly smaller
             
             lineIndex++;
@@ -250,7 +260,7 @@ export function initAlarmcentraleAnimation(containerId) {
     function animate() {
         requestAnimationFrame(animate);
         time += 0.008;
-        autoRotation += 0.002; // Continuous rotation
+        autoRotation += 0.0008; // Slower continuous rotation
 
         // Smooth mouse rotation
         currentRotation.x += (targetRotation.x - currentRotation.x) * smoothing;
