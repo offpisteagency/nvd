@@ -141,6 +141,23 @@ export function initSurveillanceAnimation(containerId) {
     const irisParticles = new THREE.Points(geometry, material);
     mainGroup.add(irisParticles);
 
+    // Mouse interaction - eye follows cursor
+    const mouse = { x: 0, y: 0 };
+    const targetRotation = { x: 0, y: 0 };
+    const currentRotation = { x: 0, y: 0 };
+    const mouseInfluence = 0.15; // How much the eye rotates toward mouse (radians)
+    const smoothing = 0.05; // How smoothly it follows (lower = smoother)
+
+    window.addEventListener('mousemove', (event) => {
+        // Normalize mouse position to -1 to 1
+        mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        
+        // Set target rotation based on mouse position
+        targetRotation.y = mouse.x * mouseInfluence; // Left/right
+        targetRotation.x = -mouse.y * mouseInfluence; // Up/down
+    });
+
     // Handle resize
     function updateCameraPosition() {
         const width = window.innerWidth;
@@ -188,6 +205,13 @@ export function initSurveillanceAnimation(containerId) {
             positionAttribute.array[i * 3 + 2] = originalPositions[i * 3 + 2] + dz;
         }
         positionAttribute.needsUpdate = true;
+
+        // Smooth mouse following - eye "looks" at cursor
+        currentRotation.x += (targetRotation.x - currentRotation.x) * smoothing;
+        currentRotation.y += (targetRotation.y - currentRotation.y) * smoothing;
+        
+        mainGroup.rotation.x = currentRotation.x;
+        mainGroup.rotation.y = currentRotation.y;
 
         renderer.render(scene, camera);
     }
