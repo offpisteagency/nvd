@@ -144,7 +144,7 @@ export function initSurveillanceAnimation(containerId) {
     // Mouse interaction - pupil follows cursor
     const targetOffset = { x: 0, y: 0 };
     const currentOffset = { x: 0, y: 0 };
-    const mouseInfluence = 3; // How much the pupil shifts (in world units)
+    const mouseInfluence = 2; // How much the pupil shifts (subtle)
     const smoothing = 0.04; // How smoothly it follows (lower = smoother)
 
     window.addEventListener('mousemove', (event) => {
@@ -203,9 +203,9 @@ export function initSurveillanceAnimation(containerId) {
             const dy = Math.sin(time * speed * 0.8 + oy) * 0.6;
             const dz = Math.sin(time * speed * 0.6 + oz) * 0.3;
             
-            // Apply floating + mouse offset (shifts the entire ring, moving the pupil)
-            positionAttribute.array[i * 3] = originalPositions[i * 3] + dx + currentOffset.x;
-            positionAttribute.array[i * 3 + 1] = originalPositions[i * 3 + 1] + dy + currentOffset.y;
+            // Apply floating + inverted mouse offset (pupil moves toward mouse)
+            positionAttribute.array[i * 3] = originalPositions[i * 3] + dx - currentOffset.x;
+            positionAttribute.array[i * 3 + 1] = originalPositions[i * 3 + 1] + dy - currentOffset.y;
             positionAttribute.array[i * 3 + 2] = originalPositions[i * 3 + 2] + dz;
         }
         positionAttribute.needsUpdate = true;
