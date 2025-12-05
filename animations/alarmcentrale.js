@@ -10,12 +10,13 @@ export function initAlarmcentraleAnimation(containerId) {
     // Configuration
     const config = {
         color: 0xadadad,
-        particleCount: 40, // Increased to form a better sphere
-        radius: 25, // Tighter radius for the sphere
-        centralNodeSize: 2.5,
-        satelliteNodeSize: 0.5,
-        lineOpacity: 0.2,
-        connectionDistance: 18 // Distance to connect neighbors on surface (increased for better mesh)
+        // Sphere structure
+        sphereRadius: 35,
+        particleCount: 20000, // Dense particles on sphere surface
+        // Connection lines
+        lineParticleCount: 8000, // Particles for connection lines
+        satelliteCount: 40, // Number of satellite connection points
+        connectionDistance: 18,
     };
 
     // Scene setup
@@ -23,7 +24,7 @@ export function initAlarmcentraleAnimation(containerId) {
     
     // Camera setup
     const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000);
-    camera.position.z = 80;
+    camera.position.z = 100;
 
     // Renderer setup
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
@@ -35,151 +36,246 @@ export function initAlarmcentraleAnimation(containerId) {
     const mainGroup = new THREE.Group();
     scene.add(mainGroup);
 
-    // Materials
-    const nodeMaterial = new THREE.MeshBasicMaterial({ 
-        color: config.color
-    });
-
-    const lineMaterial = new THREE.LineBasicMaterial({ 
-        color: config.color, 
-        transparent: true, 
-        opacity: config.lineOpacity 
-    });
-
-    // 1. Central Node
-    const centralGeometry = new THREE.SphereGeometry(config.centralNodeSize, 32, 32);
-    const centralNode = new THREE.Mesh(centralGeometry, nodeMaterial);
-    mainGroup.add(centralNode);
-
-    // 2. Satellite Nodes (Fibonacci Sphere Distribution)
+    // Generate satellite positions using Fibonacci sphere distribution
     const satellites = [];
-    const satelliteGeometry = new THREE.SphereGeometry(config.satelliteNodeSize, 16, 16);
-
     const phi = Math.PI * (3 - Math.sqrt(5)); // Golden angle
 
-    for (let i = 0; i < config.particleCount; i++) {
-        const node = new THREE.Mesh(satelliteGeometry, nodeMaterial);
-        
-        const y = 1 - (i / (config.particleCount - 1)) * 2; // y goes from 1 to -1
-        const radiusAtY = Math.sqrt(1 - y * y); // Radius at y
-        
-        const theta = phi * i; // Golden angle increment
+    for (let i = 0; i < config.satelliteCount; i++) {
+        const y = 1 - (i / (config.satelliteCount - 1)) * 2;
+        const radiusAtY = Math.sqrt(1 - y * y);
+        const theta = phi * i;
         
         const x = Math.cos(theta) * radiusAtY;
         const z = Math.sin(theta) * radiusAtY;
-
-        // Scale to desired radius
-        node.position.set(
-            x * config.radius,
-            y * config.radius,
-            z * config.radius
-        );
-
-        // Store original position relative to the group (rigid body)
-        // We don't need to store velocity/offset because we rotate the whole group
         
-        satellites.push(node);
-        mainGroup.add(node);
+        satellites.push({
+            x: x * config.sphereRadius,
+            y: y * config.sphereRadius,
+            z: z * config.sphereRadius
+        });
     }
 
-    // Background Particles
-    const particlesGeometry = new THREE.BufferGeometry();
-    const particleCount = 40;
-    const particlePositions = new Float32Array(particleCount * 3);
-
-    for(let i = 0; i < particleCount * 3; i += 3) {
-        particlePositions[i] = (Math.random() - 0.5) * 200;
-        particlePositions[i+1] = (Math.random() - 0.5) * 100;
-        particlePositions[i+2] = (Math.random() - 0.5) * 100 - 20;
-    }
-
-    particlesGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
-    const particlesMaterial = new THREE.PointsMaterial({
-        color: 0xadadad,
-        size: 0.4,
-        transparent: true,
-        opacity: 0.15,
-        sizeAttenuation: true
-    });
-    const particleSystem = new THREE.Points(particlesGeometry, particlesMaterial);
-    scene.add(particleSystem);
-
-
-    // 3. Connections (Calculated once, as relative positions don't change in a rigid body)
-    const lineGeometry = new THREE.BufferGeometry();
-    const positions = [];
-    const centerPos = centralNode.position; // (0,0,0)
-
-    // Connect all satellites to center
+    // Calculate connections between satellites
+    const connections = [];
+    // Connect to center
     satellites.forEach(sat => {
-        positions.push(0, 0, 0);
-        positions.push(sat.position.x, sat.position.y, sat.position.z);
+        connections.push({ from: { x: 0, y: 0, z: 0 }, to: sat });
     });
-
-    // Connect satellites to neighbors (Triangular Mesh)
+    // Connect nearby satellites
     for (let i = 0; i < satellites.length; i++) {
         for (let j = i + 1; j < satellites.length; j++) {
-            const dist = satellites[i].position.distanceTo(satellites[j].position);
+            const dx = satellites[i].x - satellites[j].x;
+            const dy = satellites[i].y - satellites[j].y;
+            const dz = satellites[i].z - satellites[j].z;
+            const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
             if (dist < config.connectionDistance) {
-                positions.push(satellites[i].position.x, satellites[i].position.y, satellites[i].position.z);
-                positions.push(satellites[j].position.x, satellites[j].position.y, satellites[j].position.z);
+                connections.push({ from: satellites[i], to: satellites[j] });
             }
         }
     }
-    
-    lineGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    const lineSegments = new THREE.LineSegments(lineGeometry, lineMaterial);
-    mainGroup.add(lineSegments);
 
-
-    // Mouse Parallax State (REMOVED)
+    // Total particles
+    const totalParticles = config.particleCount + config.lineParticleCount;
     
-    // Function to update camera distance based on screen width
-    function updateCameraPosition() {
-        const width = window.innerWidth;
-        // Mobile: further away (larger z), Desktop: closer (smaller z)
-        // Base Z is 80 for desktop (>1200px), maybe 120 for mobile (<600px)
+    // Create particle system
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(totalParticles * 3);
+    const opacities = new Float32Array(totalParticles);
+    const sizes = new Float32Array(totalParticles);
+    
+    const originalPositions = new Float32Array(totalParticles * 3);
+    const floatOffsets = new Float32Array(totalParticles * 3);
+    const floatSpeeds = new Float32Array(totalParticles);
+
+    // 1. Sphere surface particles
+    for (let i = 0; i < config.particleCount; i++) {
+        // Fibonacci sphere distribution for uniform coverage
+        const y = 1 - (i / (config.particleCount - 1)) * 2;
+        const radiusAtY = Math.sqrt(1 - y * y);
+        const theta = phi * i;
         
-        if (width < 600) {
-            camera.position.z = 110; // Mobile
-        } else if (width < 900) {
-            camera.position.z = 95; // Tablet
-        } else {
-            camera.position.z = 80; // Desktop
-        }
+        const x = Math.cos(theta) * radiusAtY * config.sphereRadius;
+        const yPos = y * config.sphereRadius;
+        const z = Math.sin(theta) * radiusAtY * config.sphereRadius;
+
+        positions[i * 3] = x;
+        positions[i * 3 + 1] = yPos;
+        positions[i * 3 + 2] = z;
+        
+        originalPositions[i * 3] = x;
+        originalPositions[i * 3 + 1] = yPos;
+        originalPositions[i * 3 + 2] = z;
+        
+        floatOffsets[i * 3] = Math.random() * Math.PI * 2;
+        floatOffsets[i * 3 + 1] = Math.random() * Math.PI * 2;
+        floatOffsets[i * 3 + 2] = Math.random() * Math.PI * 2;
+        floatSpeeds[i] = 0.3 + Math.random() * 0.7;
+
+        // Vertical gradient (bright top, dark bottom)
+        const normalizedY = (yPos / config.sphereRadius + 1) / 2; // 0 at bottom, 1 at top
+        const gradientOpacity = 0.15 + normalizedY * 0.85;
+        
+        opacities[i] = gradientOpacity;
+        sizes[i] = 1.0 + Math.random() * 0.5;
     }
 
-    // Initial call
-    updateCameraPosition();
+    // 2. Connection line particles
+    const particlesPerConnection = Math.floor(config.lineParticleCount / connections.length);
+    let lineIndex = config.particleCount;
+    
+    connections.forEach(conn => {
+        for (let j = 0; j < particlesPerConnection && lineIndex < totalParticles; j++) {
+            const t = Math.random(); // Random position along line
+            const x = conn.from.x + (conn.to.x - conn.from.x) * t;
+            const y = conn.from.y + (conn.to.y - conn.from.y) * t;
+            const z = conn.from.z + (conn.to.z - conn.from.z) * t;
+            
+            positions[lineIndex * 3] = x;
+            positions[lineIndex * 3 + 1] = y;
+            positions[lineIndex * 3 + 2] = z;
+            
+            originalPositions[lineIndex * 3] = x;
+            originalPositions[lineIndex * 3 + 1] = y;
+            originalPositions[lineIndex * 3 + 2] = z;
+            
+            floatOffsets[lineIndex * 3] = Math.random() * Math.PI * 2;
+            floatOffsets[lineIndex * 3 + 1] = Math.random() * Math.PI * 2;
+            floatOffsets[lineIndex * 3 + 2] = Math.random() * Math.PI * 2;
+            floatSpeeds[lineIndex] = 0.3 + Math.random() * 0.7;
+
+            // Vertical gradient for lines too
+            const normalizedY = (y / config.sphereRadius + 1) / 2;
+            const gradientOpacity = 0.1 + normalizedY * 0.5; // Lines slightly more transparent
+            
+            opacities[lineIndex] = gradientOpacity;
+            sizes[lineIndex] = 0.8 + Math.random() * 0.3; // Slightly smaller
+            
+            lineIndex++;
+        }
+    });
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('opacity', new THREE.BufferAttribute(opacities, 1));
+    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+    // Custom shader material (same style as surveillance/familyoffice)
+    const material = new THREE.ShaderMaterial({
+        uniforms: {
+            color: { value: new THREE.Color(config.color) },
+            pointSize: { value: 2.0 }
+        },
+        vertexShader: `
+            attribute float opacity;
+            attribute float size;
+            varying float vOpacity;
+            varying float vDepth;
+            uniform float pointSize;
+            
+            void main() {
+                vOpacity = opacity;
+                
+                vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                vDepth = -mvPosition.z;
+                
+                // Size varies slightly with depth for 3D feel
+                float depthScale = 250.0 / vDepth;
+                gl_PointSize = size * pointSize * depthScale;
+                gl_Position = projectionMatrix * mvPosition;
+            }
+        `,
+        fragmentShader: `
+            uniform vec3 color;
+            varying float vOpacity;
+            
+            void main() {
+                // Circular point
+                vec2 center = gl_PointCoord - vec2(0.5);
+                float dist = length(center);
+                if (dist > 0.5) discard;
+                
+                // Soft edge
+                float alpha = smoothstep(0.5, 0.2, dist) * vOpacity;
+                gl_FragColor = vec4(color, alpha);
+            }
+        `,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+    });
+
+    const particles = new THREE.Points(geometry, material);
+    mainGroup.add(particles);
+
+    // Mouse interaction - subtle rotation influence
+    const targetRotation = { x: 0, y: 0 };
+    const currentRotation = { x: 0, y: 0 };
+    const maxRotation = 0.1;
+    const smoothing = 0.025;
+
+    window.addEventListener('mousemove', (event) => {
+        const mouseX = (event.clientX / window.innerWidth) * 2 - 1;
+        const mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
+        
+        targetRotation.x = -mouseY * maxRotation;
+        targetRotation.y = mouseX * maxRotation;
+    });
 
     // Handle resize
+    function updateCameraPosition() {
+        const width = window.innerWidth;
+        if (width < 600) {
+            camera.position.z = 140;
+        } else if (width < 900) {
+            camera.position.z = 120;
+        } else {
+            camera.position.z = 100;
+        }
+    }
+    updateCameraPosition();
+
     window.addEventListener('resize', () => {
         const width = container.clientWidth;
         const height = container.clientHeight;
         camera.aspect = width / height;
         camera.updateProjectionMatrix();
         renderer.setSize(width, height);
-        
-        // Update responsiveness
         updateCameraPosition();
     });
 
     // Animation loop
     let time = 0;
+    let autoRotation = 0;
+    const positionAttribute = geometry.getAttribute('position');
+    
     function animate() {
         requestAnimationFrame(animate);
-        time += 0.002;
+        time += 0.008;
+        autoRotation += 0.002; // Continuous rotation
 
-        // Smooth infinite loop rotation (Continuous Spin)
-        // Increment rotation continuously for infinite loop
-        // Y-axis spin (Globe style) - Subtle
-        mainGroup.rotation.y += 0.002; 
+        // Smooth mouse rotation
+        currentRotation.x += (targetRotation.x - currentRotation.x) * smoothing;
+        currentRotation.y += (targetRotation.y - currentRotation.y) * smoothing;
         
-        // Optional: Very slight X tilt/wobble if desired, but keeping it clean to Y-axis per request
-        // mainGroup.rotation.x = Math.sin(time * 0.5) * 0.1; 
+        // Combine auto-rotation with mouse influence
+        mainGroup.rotation.x = currentRotation.x;
+        mainGroup.rotation.y = autoRotation + currentRotation.y;
 
-        // Background subtle rotation
-        particleSystem.rotation.y = -time * 0.02;
+        // Subtle organic floating movement for each particle
+        for (let i = 0; i < totalParticles; i++) {
+            const speed = floatSpeeds[i];
+            const ox = floatOffsets[i * 3];
+            const oy = floatOffsets[i * 3 + 1];
+            const oz = floatOffsets[i * 3 + 2];
+            
+            const dx = Math.sin(time * speed + ox) * 0.4;
+            const dy = Math.sin(time * speed * 0.8 + oy) * 0.4;
+            const dz = Math.sin(time * speed * 0.6 + oz) * 0.3;
+            
+            positionAttribute.array[i * 3] = originalPositions[i * 3] + dx;
+            positionAttribute.array[i * 3 + 1] = originalPositions[i * 3 + 1] + dy;
+            positionAttribute.array[i * 3 + 2] = originalPositions[i * 3 + 2] + dz;
+        }
+        positionAttribute.needsUpdate = true;
 
         renderer.render(scene, camera);
     }
