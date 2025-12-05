@@ -10,7 +10,7 @@ export function initSurveillanceAnimation(containerId) {
     // Configuration
     const config = {
         color: 0xadadad,
-        particleCount: 80000, // High count for dense grainy look
+        particleCount: 15000, // Reduced for visible movement
         innerRadius: 15, // Pupil hole
         outerRadius: 45, // Outer edge of iris
         edgeFade: 8, // How much the edges fade out
@@ -92,7 +92,7 @@ export function initSurveillanceAnimation(containerId) {
         edgeFade = Math.max(0, Math.min(1, edgeFade));
         
         opacities[i] = gradientOpacity * edgeFade;
-        sizes[i] = 0.8 + Math.random() * 0.4; // Slight size variation
+        sizes[i] = 1.0 + Math.random() * 0.5; // Slightly larger particles
     }
 
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -178,10 +178,10 @@ export function initSurveillanceAnimation(containerId) {
             const oy = floatOffsets[i * 3 + 1];
             const oz = floatOffsets[i * 3 + 2];
             
-            // Small displacement based on sine waves with different phases
-            const dx = Math.sin(time * speed + ox) * 0.15;
-            const dy = Math.sin(time * speed * 0.8 + oy) * 0.15;
-            const dz = Math.sin(time * speed * 0.6 + oz) * 0.1;
+            // Visible floating displacement - organic drifting motion
+            const dx = Math.sin(time * speed + ox) * 0.6;
+            const dy = Math.sin(time * speed * 0.8 + oy) * 0.6;
+            const dz = Math.sin(time * speed * 0.6 + oz) * 0.3;
             
             positionAttribute.array[i * 3] = originalPositions[i * 3] + dx;
             positionAttribute.array[i * 3 + 1] = originalPositions[i * 3 + 1] + dy;
