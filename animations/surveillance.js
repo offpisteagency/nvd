@@ -9,12 +9,11 @@ export function initSurveillanceAnimation(containerId) {
 
     // Configuration
     const config = {
-        color: 0xffffff,
-        particleCount: 25000, // High count for grainy look
-        eyeballRadius: 45,
-        pupilRadius: 10,
-        irisRadius: 28,
-        depthFuzz: 2, // Randomness in depth (layers)
+        color: 0xadadad,
+        particleCount: 80000, // High count for dense grainy look
+        innerRadius: 15, // Pupil hole
+        outerRadius: 45, // Outer edge of iris
+        edgeFade: 8, // How much the edges fade out
     };
 
     // Scene setup
@@ -22,7 +21,7 @@ export function initSurveillanceAnimation(containerId) {
     
     // Camera setup
     const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000);
-    camera.position.z = 120;
+    camera.position.z = 100;
 
     // Renderer setup
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
@@ -30,76 +29,127 @@ export function initSurveillanceAnimation(containerId) {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(renderer.domElement);
 
-    // Group to hold everything - acts as the "Eyeball" center of rotation
+    // Group to hold everything
     const mainGroup = new THREE.Group();
     scene.add(mainGroup);
 
-    // 1. Particle Iris
-    // We distribute particles on the surface of a sphere (the eyeball), within a specific band (the iris).
-    
+    // Create particle system for the iris
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(config.particleCount * 3);
+    const opacities = new Float32Array(config.particleCount);
+    const sizes = new Float32Array(config.particleCount);
     
-    // Calculate angles for pupil and iris limits
-    const phiMin = Math.asin(config.pupilRadius / config.eyeballRadius);
-    const phiMax = Math.asin(config.irisRadius / config.eyeballRadius);
+    // Store original positions and random offsets for floating animation
+    const originalPositions = new Float32Array(config.particleCount * 3);
+    const floatOffsets = new Float32Array(config.particleCount * 3); // Random phase offsets
+    const floatSpeeds = new Float32Array(config.particleCount); // Random speeds
 
     for (let i = 0; i < config.particleCount; i++) {
-        // Random spherical coordinates
-        // To get uniform distribution on surface: cos(phi) should be uniform? 
-        // Or just random phi in range is fine for this effect (might be denser near pupil, which is cool).
-        // Let's use simple random for phi to get a bit of gradient density if it happens, or linear interpolation.
+        // Distribute in a ring/annulus shape (flat on XY plane)
+        const angle = Math.random() * Math.PI * 2;
         
-        const r = config.eyeballRadius + (Math.random() - 0.5) * config.depthFuzz;
-        const theta = Math.random() * Math.PI * 2;
+        // Use sqrt for uniform distribution in disc
+        const minR = config.innerRadius / config.outerRadius;
+        const r = Math.sqrt(minR * minR + Math.random() * (1 - minR * minR)) * config.outerRadius;
         
-        // Random phi between min and max
-        // Squaring random can bias distribution if needed, but linear is fine for noise
-        const phi = phiMin + Math.random() * (phiMax - phiMin);
-        
-        // Convert to Cartesian
-        // Orient so the eye looks along positive Z axis initially
-        // Standard sphere: z is up? No, usually y is up.
-        // Let's say looking down Z axis:
-        // x = r * sin(phi) * cos(theta)
-        // y = r * sin(phi) * sin(theta)
-        // z = r * cos(phi)
-        
-        const x = r * Math.sin(phi) * Math.cos(theta);
-        const y = r * Math.sin(phi) * Math.sin(theta);
-        const z = r * Math.cos(phi);
+        const x = Math.cos(angle) * r;
+        const y = Math.sin(angle) * r;
+        const z = (Math.random() - 0.5) * 3; // Slight depth variation
 
         positions[i * 3] = x;
         positions[i * 3 + 1] = y;
         positions[i * 3 + 2] = z;
+        
+        // Store original positions
+        originalPositions[i * 3] = x;
+        originalPositions[i * 3 + 1] = y;
+        originalPositions[i * 3 + 2] = z;
+        
+        // Random offsets for organic floating
+        floatOffsets[i * 3] = Math.random() * Math.PI * 2;
+        floatOffsets[i * 3 + 1] = Math.random() * Math.PI * 2;
+        floatOffsets[i * 3 + 2] = Math.random() * Math.PI * 2;
+        floatSpeeds[i] = 0.3 + Math.random() * 0.7;
+
+        // Calculate opacity based on Y position (gradient: bright top, dark bottom)
+        // Normalize y to -1 to 1 range
+        const normalizedY = y / config.outerRadius;
+        // Map to opacity: top (y=1) = bright, bottom (y=-1) = dark
+        const gradientOpacity = 0.15 + (normalizedY + 1) * 0.425; // Range: 0.15 to 1.0
+        
+        // Also fade edges (inner and outer)
+        const distFromCenter = r;
+        let edgeFade = 1.0;
+        
+        // Fade near inner edge (pupil)
+        if (distFromCenter < config.innerRadius + config.edgeFade) {
+            edgeFade *= (distFromCenter - config.innerRadius) / config.edgeFade;
+        }
+        // Fade near outer edge
+        if (distFromCenter > config.outerRadius - config.edgeFade) {
+            edgeFade *= (config.outerRadius - distFromCenter) / config.edgeFade;
+        }
+        edgeFade = Math.max(0, Math.min(1, edgeFade));
+        
+        opacities[i] = gradientOpacity * edgeFade;
+        sizes[i] = 0.8 + Math.random() * 0.4; // Slight size variation
     }
 
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('opacity', new THREE.BufferAttribute(opacities, 1));
+    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
 
-    const material = new THREE.PointsMaterial({
-        color: config.color,
-        size: 0.3, // Small grainy dots
+    // Custom shader material for per-particle opacity
+    const material = new THREE.ShaderMaterial({
+        uniforms: {
+            color: { value: new THREE.Color(config.color) },
+            pointSize: { value: 2.0 }
+        },
+        vertexShader: `
+            attribute float opacity;
+            attribute float size;
+            varying float vOpacity;
+            uniform float pointSize;
+            
+            void main() {
+                vOpacity = opacity;
+                vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                gl_PointSize = size * pointSize * (300.0 / -mvPosition.z);
+                gl_Position = projectionMatrix * mvPosition;
+            }
+        `,
+        fragmentShader: `
+            uniform vec3 color;
+            varying float vOpacity;
+            
+            void main() {
+                // Circular point
+                vec2 center = gl_PointCoord - vec2(0.5);
+                float dist = length(center);
+                if (dist > 0.5) discard;
+                
+                // Soft edge
+                float alpha = smoothstep(0.5, 0.2, dist) * vOpacity;
+                gl_FragColor = vec4(color, alpha);
+            }
+        `,
         transparent: true,
-        opacity: 0.8,
-        sizeAttenuation: true,
-        // Blending?
+        depthWrite: false,
         blending: THREE.AdditiveBlending
     });
 
     const irisParticles = new THREE.Points(geometry, material);
     mainGroup.add(irisParticles);
 
-    // Offset the camera so we see the front of the eye (which is at z ~ eyeballRadius)
-    // The eye center is at 0,0,0. The surface is at z=45.
-    // Camera at 120 means distance is 75.
-    
     // Handle resize
     function updateCameraPosition() {
         const width = window.innerWidth;
         if (width < 600) {
-            camera.position.z = 160; // Mobile needs to be further back
-        } else {
+            camera.position.z = 140;
+        } else if (width < 900) {
             camera.position.z = 120;
+        } else {
+            camera.position.z = 100;
         }
     }
     updateCameraPosition();
@@ -115,30 +165,29 @@ export function initSurveillanceAnimation(containerId) {
 
     // Animation loop
     let time = 0;
-    // Perlin-like noise or just smooth sine sums for natural movement
+    const positionAttribute = geometry.getAttribute('position');
+    
     function animate() {
         requestAnimationFrame(animate);
-        time += 0.005;
+        time += 0.008;
 
-        // Subtle "looking around"
-        // Rotate the entire eyeball group around (0,0,0)
-        // Since particles are on the surface at Z+, rotating X and Y moves the "pupil"
-        
-        const lookX = Math.sin(time * 0.7) * 0.3 + Math.cos(time * 0.3) * 0.1; // Left/Right
-        const lookY = Math.cos(time * 0.5) * 0.3 + Math.sin(time * 0.2) * 0.1; // Up/Down
-        
-        // Smoothly interpolate or just apply
-        // We want very subtle movement. 0.3 radians is ~17 degrees, might be too much?
-        // "Very subtle" -> scale down.
-        
-        mainGroup.rotation.y = lookX * 0.5; 
-        mainGroup.rotation.x = lookY * 0.3;
-
-        // Add some internal rotation to the iris particles to make it feel dynamic/scanning?
-        // Or just static noise structure? 
-        // "Eye made out of particles" usually implies some energy.
-        // Let's rotate the iris slightly around the Z axis (spin)
-        irisParticles.rotation.z -= 0.002;
+        // Subtle organic floating movement for each particle
+        for (let i = 0; i < config.particleCount; i++) {
+            const speed = floatSpeeds[i];
+            const ox = floatOffsets[i * 3];
+            const oy = floatOffsets[i * 3 + 1];
+            const oz = floatOffsets[i * 3 + 2];
+            
+            // Small displacement based on sine waves with different phases
+            const dx = Math.sin(time * speed + ox) * 0.15;
+            const dy = Math.sin(time * speed * 0.8 + oy) * 0.15;
+            const dz = Math.sin(time * speed * 0.6 + oz) * 0.1;
+            
+            positionAttribute.array[i * 3] = originalPositions[i * 3] + dx;
+            positionAttribute.array[i * 3 + 1] = originalPositions[i * 3 + 1] + dy;
+            positionAttribute.array[i * 3 + 2] = originalPositions[i * 3 + 2] + dz;
+        }
+        positionAttribute.needsUpdate = true;
 
         renderer.render(scene, camera);
     }
