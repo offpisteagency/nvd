@@ -10,14 +10,14 @@ export function initFamilyOfficeAnimation(containerId) {
     // Configuration
     const config = {
         color: 0xadadad,
-        particleCount: 20000,
-        // Lock dimensions
-        bodyWidth: 32,
-        bodyHeight: 28,
-        bodyDepth: 12,
-        shackleRadius: 14,
-        shackleThickness: 4,
-        shackleHeight: 18,
+        particleCount: 25000,
+        // Lock dimensions (bigger)
+        bodyWidth: 44,
+        bodyHeight: 38,
+        bodyDepth: 16,
+        shackleRadius: 16,
+        shackleThickness: 5,
+        shackleLegsHeight: 8, // Height of vertical legs connecting to body
     };
 
     // Scene setup
@@ -49,8 +49,9 @@ export function initFamilyOfficeAnimation(containerId) {
     const floatSpeeds = new Float32Array(config.particleCount);
 
     // Calculate how many particles for each part (roughly proportional to surface area)
-    const bodyParticles = Math.floor(config.particleCount * 0.65);
-    const shackleParticles = config.particleCount - bodyParticles;
+    const bodyParticles = Math.floor(config.particleCount * 0.6);
+    const shackleArcParticles = Math.floor(config.particleCount * 0.25);
+    const shackleLegsParticles = config.particleCount - bodyParticles - shackleArcParticles;
 
     // Helper to check if point is inside rounded rectangle
     function isInsideRoundedRect(x, y, width, height, radius) {
@@ -75,8 +76,11 @@ export function initFamilyOfficeAnimation(containerId) {
         return x >= -hw && x <= hw && y >= -hh && y <= hh;
     }
 
+    // Body top Y position (shackle connects here)
+    const bodyTopY = config.bodyHeight / 2;
+    
     // Calculate bounds for the full lock (for gradient calculation)
-    const lockTop = config.shackleHeight + config.shackleRadius;
+    const lockTop = bodyTopY + config.shackleLegsHeight + config.shackleRadius;
     const lockBottom = -config.bodyHeight / 2;
     const lockTotalHeight = lockTop - lockBottom;
 
@@ -85,7 +89,7 @@ export function initFamilyOfficeAnimation(containerId) {
         
         if (i < bodyParticles) {
             // Lock body - rounded rectangle with 3D depth
-            const cornerRadius = 4;
+            const cornerRadius = 5;
             
             // Generate point on surface of rounded box
             const face = Math.random();
@@ -126,29 +130,41 @@ export function initFamilyOfficeAnimation(containerId) {
                 z = (Math.random() - 0.5) * config.bodyDepth;
             }
             
-            // Offset body to be below shackle
-            y -= config.bodyHeight / 2 - 2;
-            
-        } else {
-            // Shackle - curved arch on top of the body
+        } else if (i < bodyParticles + shackleArcParticles) {
+            // Shackle arc - curved top part
             const angle = Math.random() * Math.PI; // Half circle (0 to PI)
             const tubeAngle = Math.random() * Math.PI * 2; // Around the tube
             
-            // Position along the shackle arc
+            // Position along the shackle arc (sitting on top of legs)
             const arcX = Math.cos(angle) * config.shackleRadius;
-            const arcY = Math.sin(angle) * config.shackleRadius + config.shackleHeight;
+            const arcY = Math.sin(angle) * config.shackleRadius + bodyTopY + config.shackleLegsHeight;
             
             // Add tube thickness
             const tubeOffsetX = Math.cos(tubeAngle) * config.shackleThickness * 0.5;
             const tubeOffsetZ = Math.sin(tubeAngle) * config.shackleThickness * 0.5;
             
-            // Blend tube offset based on arc position for realistic tube
             x = arcX + tubeOffsetX * Math.sin(angle);
-            y = arcY;
+            y = arcY + Math.cos(tubeAngle) * config.shackleThickness * 0.3;
             z = tubeOffsetZ;
             
-            // Add slight Y offset based on tube angle for 3D effect
-            y += Math.cos(tubeAngle) * config.shackleThickness * 0.3;
+        } else {
+            // Shackle legs - vertical parts connecting arc to body
+            const isLeftLeg = Math.random() < 0.5;
+            const tubeAngle = Math.random() * Math.PI * 2;
+            
+            // X position at left or right side of shackle
+            const legX = isLeftLeg ? -config.shackleRadius : config.shackleRadius;
+            
+            // Y position: from body top to where arc starts
+            const legY = bodyTopY + Math.random() * config.shackleLegsHeight;
+            
+            // Add tube thickness
+            const tubeOffsetX = Math.cos(tubeAngle) * config.shackleThickness * 0.5;
+            const tubeOffsetZ = Math.sin(tubeAngle) * config.shackleThickness * 0.5;
+            
+            x = legX + tubeOffsetX;
+            y = legY;
+            z = tubeOffsetZ;
         }
 
         positions[i * 3] = x;
@@ -247,11 +263,11 @@ export function initFamilyOfficeAnimation(containerId) {
     function updateCameraPosition() {
         const width = window.innerWidth;
         if (width < 600) {
-            camera.position.z = 140;
+            camera.position.z = 130;
         } else if (width < 900) {
-            camera.position.z = 120;
+            camera.position.z = 110;
         } else {
-            camera.position.z = 100;
+            camera.position.z = 95;
         }
     }
     updateCameraPosition();
