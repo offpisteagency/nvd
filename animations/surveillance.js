@@ -141,21 +141,20 @@ export function initSurveillanceAnimation(containerId) {
     const irisParticles = new THREE.Points(geometry, material);
     mainGroup.add(irisParticles);
 
-    // Mouse interaction - eye follows cursor
-    const mouse = { x: 0, y: 0 };
-    const targetRotation = { x: 0, y: 0 };
-    const currentRotation = { x: 0, y: 0 };
-    const mouseInfluence = 0.15; // How much the eye rotates toward mouse (radians)
-    const smoothing = 0.05; // How smoothly it follows (lower = smoother)
+    // Mouse interaction - pupil follows cursor
+    const targetOffset = { x: 0, y: 0 };
+    const currentOffset = { x: 0, y: 0 };
+    const mouseInfluence = 3; // How much the pupil shifts (in world units)
+    const smoothing = 0.04; // How smoothly it follows (lower = smoother)
 
     window.addEventListener('mousemove', (event) => {
         // Normalize mouse position to -1 to 1
-        mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-        mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        const mouseX = (event.clientX / window.innerWidth) * 2 - 1;
+        const mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
         
-        // Set target rotation based on mouse position
-        targetRotation.y = mouse.x * mouseInfluence; // Left/right
-        targetRotation.x = -mouse.y * mouseInfluence; // Up/down
+        // Set target offset based on mouse position
+        targetOffset.x = mouseX * mouseInfluence;
+        targetOffset.y = mouseY * mouseInfluence;
     });
 
     // Handle resize
@@ -188,7 +187,11 @@ export function initSurveillanceAnimation(containerId) {
         requestAnimationFrame(animate);
         time += 0.008;
 
-        // Subtle organic floating movement for each particle
+        // Smooth pupil offset following mouse
+        currentOffset.x += (targetOffset.x - currentOffset.x) * smoothing;
+        currentOffset.y += (targetOffset.y - currentOffset.y) * smoothing;
+
+        // Subtle organic floating movement for each particle + mouse offset
         for (let i = 0; i < config.particleCount; i++) {
             const speed = floatSpeeds[i];
             const ox = floatOffsets[i * 3];
@@ -200,18 +203,12 @@ export function initSurveillanceAnimation(containerId) {
             const dy = Math.sin(time * speed * 0.8 + oy) * 0.6;
             const dz = Math.sin(time * speed * 0.6 + oz) * 0.3;
             
-            positionAttribute.array[i * 3] = originalPositions[i * 3] + dx;
-            positionAttribute.array[i * 3 + 1] = originalPositions[i * 3 + 1] + dy;
+            // Apply floating + mouse offset (shifts the entire ring, moving the pupil)
+            positionAttribute.array[i * 3] = originalPositions[i * 3] + dx + currentOffset.x;
+            positionAttribute.array[i * 3 + 1] = originalPositions[i * 3 + 1] + dy + currentOffset.y;
             positionAttribute.array[i * 3 + 2] = originalPositions[i * 3 + 2] + dz;
         }
         positionAttribute.needsUpdate = true;
-
-        // Smooth mouse following - eye "looks" at cursor
-        currentRotation.x += (targetRotation.x - currentRotation.x) * smoothing;
-        currentRotation.y += (targetRotation.y - currentRotation.y) * smoothing;
-        
-        mainGroup.rotation.x = currentRotation.x;
-        mainGroup.rotation.y = currentRotation.y;
 
         renderer.render(scene, camera);
     }
