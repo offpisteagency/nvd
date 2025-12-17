@@ -10,15 +10,16 @@ export function initSurveillanceAnimation(containerId) {
     // Configuration
     const config = {
         color: 0xadadad,
-        particleCount: 25000,
-        // Human dimensions
-        headRadius: 12,
-        headY: 10, // Offset head upwards
-        bodyWidth: 36,
-        bodyHeight: 22,
-        bodyDepth: 14,
-        bodyY: -12, // Offset body downwards
-        neckRadius: 8,
+        particleCount: 30000, // Increased count for larger surface
+        // Human dimensions (Scaled up)
+        headRadius: 18,
+        headY: 24, // Head position
+        
+        // Body dimensions (Ellipsoid for rounded shoulders)
+        bodyWidth: 70,  // Shoulder width
+        bodyHeight: 35, // Height of the bust part
+        bodyDepth: 20,  // Thickness
+        bodyY: -18,     // Base position
     };
 
     // Scene setup
@@ -48,31 +49,24 @@ export function initSurveillanceAnimation(containerId) {
     const floatOffsets = new Float32Array(config.particleCount * 3);
     const floatSpeeds = new Float32Array(config.particleCount);
 
-    // Distribution: ~30% head, ~70% body
-    const headParticles = Math.floor(config.particleCount * 0.3);
+    // Distribution
+    const headParticles = Math.floor(config.particleCount * 0.35);
     const bodyParticles = config.particleCount - headParticles;
 
-    // Helper for rounded box (body)
-    function isInsideRoundedRect(x, y, width, height, radius) {
-        const hw = width / 2;
-        const hh = height / 2;
-        const r = Math.min(radius, hw, hh);
+    // Helper for ellipsoid body (Rounded shoulders)
+    function isInsideEllipsoid(x, y, z, width, height, depth) {
+        // Normalized distance from center
+        const dx = x / (width / 2);
+        const dy = y / (height); // Treat height as radius (semi-circle)
+        const dz = z / (depth / 2);
         
-        // Simple bounding box check first
-        if (x < -hw || x > hw || y < -hh || y > hh) return false;
-
-        // Check corners
-        if (x > hw - r && y > hh - r) return (x - (hw - r))**2 + (y - (hh - r))**2 <= r**2;
-        if (x > hw - r && y < -hh + r) return (x - (hw - r))**2 + (y - (-hh + r))**2 <= r**2;
-        if (x < -hw + r && y > hh - r) return (x - (-hw + r))**2 + (y - (hh - r))**2 <= r**2;
-        if (x < -hw + r && y < -hh + r) return (x - (-hw + r))**2 + (y - (-hh + r))**2 <= r**2;
-        
-        return true;
+        // Check if inside sphere equation: x² + y² + z² <= 1
+        return (dx*dx + dy*dy + dz*dz) <= 1;
     }
 
     // Calculate bounds for gradient
     const totalTop = config.headY + config.headRadius;
-    const totalBottom = config.bodyY - config.bodyHeight/2;
+    const totalBottom = config.bodyY; // Bottom of body
     const totalHeight = totalTop - totalBottom;
 
     for (let i = 0; i < config.particleCount; i++) {
@@ -80,13 +74,12 @@ export function initSurveillanceAnimation(containerId) {
 
         if (i < headParticles) {
             // Head (Sphere)
-            // Use spherical distribution for surface, or random inside for volume?
-            // Let's do surface + volume for a solid look
+            // Surface + Volume distribution
             const u = Math.random();
             const v = Math.random();
             const theta = 2 * Math.PI * u;
             const phi = Math.acos(2 * v - 1);
-            // Random radius for volume (cube root for uniform volume)
+            // Volume distribution (cube root)
             const r = config.headRadius * Math.cbrt(Math.random());
             
             x = r * Math.sin(phi) * Math.cos(theta);
@@ -94,25 +87,22 @@ export function initSurveillanceAnimation(containerId) {
             z = r * Math.cos(phi);
 
         } else {
-            // Body (Shoulders/Bust)
-            // Generate points in a rounded volume
-            const cornerRadius = 8;
-            
-            // Rejection sampling for the body shape
+            // Body (Semi-Ellipsoid for rounded shoulders)
+            // Rejection sampling for the perfect curved shape
             do {
                 x = (Math.random() - 0.5) * config.bodyWidth;
-                y = (Math.random() - 0.5) * config.bodyHeight;
+                // Generate y from 0 to height (top half only)
+                y = Math.random() * config.bodyHeight; 
                 z = (Math.random() - 0.5) * config.bodyDepth;
-                
-                // Curve the shoulders: top of body is rounded
-                // Simple hack: if y is near top, x width reduces? 
-                // Or just use the rounded rect logic
-            } while (!isInsideRoundedRect(x, y, config.bodyWidth, config.bodyHeight, cornerRadius));
+            } while (!isInsideEllipsoid(x, y, z, config.bodyWidth, config.bodyHeight, config.bodyDepth));
 
-            y += config.bodyY; // Move to body position
+            // Shift down to position
+            // Invert Y relative to the ellipse center to create the "hill" shape
+            // The ellipsoid calc treats 0 as center. We want 0 to be the top of the body (shoulders) or bottom?
+            // Actually, let's keep y positive in generation (0 to height), then subtract to position it.
             
-            // Optional: Connect head and body with "neck" particles or just let them overlap slightly
-            // By tuning headY and bodyY they should merge naturally
+            // Reposition: bodyY is the bottom/base level
+            y = config.bodyY + y;
         }
 
         positions[i * 3] = x;
@@ -129,13 +119,15 @@ export function initSurveillanceAnimation(containerId) {
         floatSpeeds[i] = 0.3 + Math.random() * 0.7;
 
         // Gradient Opacity
+        // Brightest at the "face" (front of head) and top of shoulders
         const normalizedY = (y - totalBottom) / totalHeight;
-        // Brighter at top (head), darker at bottom (base of bust)
-        let opacity = 0.1 + normalizedY * 0.9;
+        
+        // Base opacity from Y height (0.2 to 1.0)
+        let opacity = 0.2 + normalizedY * 0.8;
         
         // Depth fade (particles further back are dimmer)
-        const normalizedZ = (z + 20) / 40; // Approx range
-        opacity *= 0.6 + normalizedZ * 0.4;
+        const normalizedZ = (z + 10) / 25; 
+        opacity *= 0.5 + normalizedZ * 0.5;
 
         opacities[i] = opacity;
         sizes[i] = 1.0 + Math.random() * 0.5;
@@ -195,7 +187,7 @@ export function initSurveillanceAnimation(containerId) {
     // Interaction
     const targetRotation = { x: 0, y: 0 };
     const currentRotation = { x: 0, y: 0 };
-    const maxRotation = 0.15; // Subtle tilt
+    const maxRotation = 0.12; // Subtle tilt
     const smoothing = 0.03;
 
     window.addEventListener('mousemove', (event) => {
