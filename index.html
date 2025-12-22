@@ -24,7 +24,10 @@
 </head>
 <body>
     <div id="hero-canvas"></div>
-    <script type="module" src="animations/home.js"></script>
+    <script type="module">
+        import { initHomeAnimation } from './animations/home.js';
+        initHomeAnimation('hero-canvas');
+    </script>
 </body>
 </html>
 
