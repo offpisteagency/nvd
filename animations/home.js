@@ -218,13 +218,25 @@ export function initHomeAnimation(containerId) {
         mainGroup.rotation.x = currentRotation.x;
         mainGroup.rotation.y = currentRotation.y;
 
-        // Calculate progress through 20-second cycle (0 to 1)
+        // Calculate progress through full cycle (fill + empty = 40 seconds total)
         const elapsed = performance.now() - startTime;
-        const cycleProgress = (elapsed % config.animationDuration) / config.animationDuration;
+        const fullCycleDuration = config.animationDuration * 2; // 40 seconds
+        const fullCycleProgress = (elapsed % fullCycleDuration) / fullCycleDuration;
         
-        // Convert progress to angle swept (clockwise from top)
-        // At progress=0, sweep=0. At progress=1, sweep=2*PI (full circle)
-        const sweepAngle = cycleProgress * Math.PI * 2;
+        // Determine if we're in fill phase (0-0.5) or empty phase (0.5-1)
+        const isFilling = fullCycleProgress < 0.5;
+        
+        // Calculate sweep angle based on phase
+        let sweepAngle;
+        if (isFilling) {
+            // Fill phase: 0 to 2*PI over first half
+            const fillProgress = fullCycleProgress * 2; // 0 to 1
+            sweepAngle = fillProgress * Math.PI * 2;
+        } else {
+            // Empty phase: shrink from 2*PI to 0 over second half
+            const emptyProgress = (fullCycleProgress - 0.5) * 2; // 0 to 1
+            sweepAngle = emptyProgress * Math.PI * 2;
+        }
 
         // Update particles
         for (let i = 0; i < config.particleCount; i++) {
@@ -247,7 +259,6 @@ export function initHomeAnimation(containerId) {
                 const particleAngle = particleAngles[i];
                 
                 // Normalize angle relative to start (12 o'clock = PI/2)
-                // We go clockwise, so we subtract from startAngle
                 // Angle difference: how far clockwise from 12 o'clock
                 let angleDiff = config.startAngle - particleAngle;
                 
@@ -255,12 +266,19 @@ export function initHomeAnimation(containerId) {
                 while (angleDiff < 0) angleDiff += Math.PI * 2;
                 while (angleDiff >= Math.PI * 2) angleDiff -= Math.PI * 2;
                 
-                // Check if this particle is within the swept area
-                if (angleDiff <= sweepAngle) {
-                    // Highlighted - bright
+                let isHighlighted;
+                if (isFilling) {
+                    // Fill phase: particles are lit if they're within the swept area
+                    isHighlighted = angleDiff <= sweepAngle;
+                } else {
+                    // Empty phase: particles turn off from the start (first on, first off)
+                    // Particle is lit if it's BEYOND the "emptied" area
+                    isHighlighted = angleDiff > sweepAngle;
+                }
+                
+                if (isHighlighted) {
                     opacityAttribute.array[i] = 0.7 + Math.random() * 0.3;
                 } else {
-                    // Not yet reached - dim
                     opacityAttribute.array[i] = 0.15;
                 }
             }
