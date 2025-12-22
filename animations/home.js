@@ -16,9 +16,9 @@ export function initHomeAnimation(containerId) {
         color: 0xadadad,
         particleCount: 25000,
         radius: 35,
-        tubeRadius: 6, // Thickness of the ring
-        activeSectorAngle: (Math.PI * 2) / 3, // 120 degrees (20 seconds out of 60)
-        startAngle: Math.PI / 2, // Start at 12 o'clock
+        tubeRadius: 6,
+        animationDuration: 20000, // 20 seconds in milliseconds
+        startAngle: Math.PI / 2, // Start at 12 o'clock (top)
     };
 
     // Scene setup
@@ -42,70 +42,53 @@ export function initHomeAnimation(containerId) {
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(config.particleCount * 3);
     const opacities = new Float32Array(config.particleCount);
+    const baseOpacities = new Float32Array(config.particleCount); // Store base opacity for non-ring particles
     const sizes = new Float32Array(config.particleCount);
     
     const originalPositions = new Float32Array(config.particleCount * 3);
     const floatOffsets = new Float32Array(config.particleCount * 3);
     const floatSpeeds = new Float32Array(config.particleCount);
-
-    // Distribution
-    // 60% particles in the ring (evenly distributed)
-    // 30% particles concentrated in the "20s" active sector for emphasis
-    // 10% particles in the center core for volume
     
-    const ringParticles = Math.floor(config.particleCount * 0.6);
-    const activeSectorParticles = Math.floor(config.particleCount * 0.3);
-    const coreParticles = config.particleCount - ringParticles - activeSectorParticles;
+    // Store angle for each particle (for ring particles, used for dynamic highlighting)
+    const particleAngles = new Float32Array(config.particleCount);
+    const isRingParticle = new Uint8Array(config.particleCount); // 1 if ring particle, 0 otherwise
+
+    // Distribution - all ring particles now, no static highlight
+    const ringParticles = Math.floor(config.particleCount * 0.85);
+    const coreParticles = config.particleCount - ringParticles;
 
     for (let i = 0; i < config.particleCount; i++) {
         let x, y, z;
-        let isHighlight = false;
+        let angle = 0;
 
         if (i < ringParticles) {
-            // General Ring (Torus)
+            // Ring particles (Torus) - evenly distributed
+            isRingParticle[i] = 1;
+            
             const u = Math.random() * Math.PI * 2; // Angle around the ring
+            angle = u;
+            
             const v = Math.random() * Math.PI * 2; // Angle inside the tube
-            
-            // Torus formula
-            // x = (R + r * cos(v)) * cos(u)
-            // y = (R + r * cos(v)) * sin(u)
-            // z = r * sin(v)
-            
-            const r = config.tubeRadius * (0.5 + 0.5 * Math.random()); // Varying thickness
+            const r = config.tubeRadius * (0.5 + 0.5 * Math.random());
             
             x = (config.radius + r * Math.cos(v)) * Math.cos(u);
             y = (config.radius + r * Math.cos(v)) * Math.sin(u);
             z = r * Math.sin(v);
             
-        } else if (i < ringParticles + activeSectorParticles) {
-            // Active "20s" Sector (High Density)
-            isHighlight = true;
-            
-            // Clockwise from top (PI/2)
-            // Angle range: [startAngle - activeSectorAngle, startAngle]
-            // Random angle within this range
-            const angleOffset = Math.random() * config.activeSectorAngle;
-            const u = config.startAngle - angleOffset;
-            
-            const v = Math.random() * Math.PI * 2;
-            // Slightly thicker for emphasis
-            const r = (config.tubeRadius + 2) * (0.3 + 0.7 * Math.random());
-            
-            x = (config.radius + r * Math.cos(v)) * Math.cos(u);
-            y = (config.radius + r * Math.cos(v)) * Math.sin(u);
-            z = r * Math.sin(v);
-
         } else {
             // Center Core (Sparse volume)
-            // Random point inside sphere
+            isRingParticle[i] = 0;
+            
             const u = Math.random() * Math.PI * 2;
             const v = Math.acos(2 * Math.random() - 1);
-            const r = config.radius * 0.8 * Math.cbrt(Math.random()); // Inside the ring
+            const r = config.radius * 0.7 * Math.cbrt(Math.random());
             
             x = r * Math.sin(v) * Math.cos(u);
             y = r * Math.sin(v) * Math.sin(u);
             z = r * Math.cos(v);
         }
+
+        particleAngles[i] = angle;
 
         positions[i * 3] = x;
         positions[i * 3 + 1] = y;
@@ -120,17 +103,16 @@ export function initHomeAnimation(containerId) {
         floatOffsets[i * 3 + 2] = Math.random() * Math.PI * 2;
         floatSpeeds[i] = 0.3 + Math.random() * 0.7;
 
-        // Opacity & Size
-        if (isHighlight) {
-            // Brighter, slightly larger for the USP area
-            opacities[i] = 0.6 + Math.random() * 0.4;
-            sizes[i] = 1.2 + Math.random() * 0.8;
+        // Initial opacity & size (ring particles will be updated dynamically)
+        if (isRingParticle[i]) {
+            opacities[i] = 0.15; // Dim by default
+            sizes[i] = 0.9 + Math.random() * 0.4;
         } else {
-            // Standard particles
-            // Slight gradient based on Y to match other scenes
+            // Core particles - slight gradient based on Y
             const normalizedY = (y / config.radius + 1) / 2;
-            opacities[i] = 0.1 + normalizedY * 0.4;
-            sizes[i] = 0.8 + Math.random() * 0.5;
+            opacities[i] = 0.08 + normalizedY * 0.2;
+            baseOpacities[i] = opacities[i];
+            sizes[i] = 0.7 + Math.random() * 0.4;
         }
     }
 
@@ -138,7 +120,7 @@ export function initHomeAnimation(containerId) {
     geometry.setAttribute('opacity', new THREE.BufferAttribute(opacities, 1));
     geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
 
-    // Shader Material (Consistent with other files)
+    // Shader Material
     const material = new THREE.ShaderMaterial({
         uniforms: {
             color: { value: new THREE.Color(config.color) },
@@ -157,7 +139,6 @@ export function initHomeAnimation(containerId) {
                 vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
                 vDepth = -mvPosition.z;
                 
-                // Size varies slightly with depth for 3D feel
                 float depthScale = 250.0 / vDepth;
                 gl_PointSize = size * pointSize * depthScale;
                 gl_Position = projectionMatrix * mvPosition;
@@ -168,12 +149,10 @@ export function initHomeAnimation(containerId) {
             varying float vOpacity;
             
             void main() {
-                // Circular point
                 vec2 center = gl_PointCoord - vec2(0.5);
                 float dist = length(center);
                 if (dist > 0.5) discard;
                 
-                // Soft edge
                 float alpha = smoothstep(0.5, 0.2, dist) * vOpacity;
                 gl_FragColor = vec4(color, alpha);
             }
@@ -186,10 +165,10 @@ export function initHomeAnimation(containerId) {
     const particles = new THREE.Points(geometry, material);
     mainGroup.add(particles);
 
-    // Mouse interaction
+    // Mouse interaction (same as surveillance/familyoffice)
     const targetRotation = { x: 0, y: 0 };
     const currentRotation = { x: 0, y: 0 };
-    const maxRotation = 0.15; // Slightly more rotation to see the 3D ring structure
+    const maxRotation = 0.12;
     const smoothing = 0.025;
 
     window.addEventListener('mousemove', (event) => {
@@ -224,26 +203,30 @@ export function initHomeAnimation(containerId) {
 
     // Animation loop
     let time = 0;
-    let autoRotation = 0;
+    const startTime = performance.now();
     const positionAttribute = geometry.getAttribute('position');
+    const opacityAttribute = geometry.getAttribute('opacity');
     
     function animate() {
         requestAnimationFrame(animate);
         time += 0.008;
-        autoRotation += 0.001; // Slow spin to show off the ring structure
 
-        // Smooth rotation
+        // Smooth mouse rotation (no auto-rotation)
         currentRotation.x += (targetRotation.x - currentRotation.x) * smoothing;
         currentRotation.y += (targetRotation.y - currentRotation.y) * smoothing;
         
-        // Apply rotation
-        // We add autoRotation to Z to make the ring spin like a wheel?
-        // Or Y to spin it like a coin? 
-        // Let's do a subtle Y spin + mouse influence
-        mainGroup.rotation.x = currentRotation.x + 0.2; // Tilt it slightly towards camera
-        mainGroup.rotation.y = currentRotation.y + autoRotation;
+        mainGroup.rotation.x = currentRotation.x;
+        mainGroup.rotation.y = currentRotation.y;
 
-        // Particle Float Animation
+        // Calculate progress through 20-second cycle (0 to 1)
+        const elapsed = performance.now() - startTime;
+        const cycleProgress = (elapsed % config.animationDuration) / config.animationDuration;
+        
+        // Convert progress to angle swept (clockwise from top)
+        // At progress=0, sweep=0. At progress=1, sweep=2*PI (full circle)
+        const sweepAngle = cycleProgress * Math.PI * 2;
+
+        // Update particles
         for (let i = 0; i < config.particleCount; i++) {
             const speed = floatSpeeds[i];
             const ox = floatOffsets[i * 3];
@@ -251,15 +234,40 @@ export function initHomeAnimation(containerId) {
             const oz = floatOffsets[i * 3 + 2];
             
             // Organic float
-            const dx = Math.sin(time * speed + ox) * 0.4;
-            const dy = Math.sin(time * speed * 0.8 + oy) * 0.4;
+            const dx = Math.sin(time * speed + ox) * 0.5;
+            const dy = Math.sin(time * speed * 0.8 + oy) * 0.5;
             const dz = Math.sin(time * speed * 0.6 + oz) * 0.3;
             
             positionAttribute.array[i * 3] = originalPositions[i * 3] + dx;
             positionAttribute.array[i * 3 + 1] = originalPositions[i * 3 + 1] + dy;
             positionAttribute.array[i * 3 + 2] = originalPositions[i * 3 + 2] + dz;
+
+            // Update opacity for ring particles based on sweep progress
+            if (isRingParticle[i]) {
+                const particleAngle = particleAngles[i];
+                
+                // Normalize angle relative to start (12 o'clock = PI/2)
+                // We go clockwise, so we subtract from startAngle
+                // Angle difference: how far clockwise from 12 o'clock
+                let angleDiff = config.startAngle - particleAngle;
+                
+                // Normalize to 0 to 2*PI range
+                while (angleDiff < 0) angleDiff += Math.PI * 2;
+                while (angleDiff >= Math.PI * 2) angleDiff -= Math.PI * 2;
+                
+                // Check if this particle is within the swept area
+                if (angleDiff <= sweepAngle) {
+                    // Highlighted - bright
+                    opacityAttribute.array[i] = 0.7 + Math.random() * 0.3;
+                } else {
+                    // Not yet reached - dim
+                    opacityAttribute.array[i] = 0.15;
+                }
+            }
         }
+        
         positionAttribute.needsUpdate = true;
+        opacityAttribute.needsUpdate = true;
 
         renderer.render(scene, camera);
     }
