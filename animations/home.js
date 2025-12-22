@@ -7,6 +7,10 @@ export function initHomeAnimation(containerId) {
         return;
     }
 
+    // Get dimensions - fallback to window size if container has no dimensions
+    const getWidth = () => container.clientWidth || window.innerWidth;
+    const getHeight = () => container.clientHeight || window.innerHeight;
+
     // Configuration
     const config = {
         color: 0xadadad,
@@ -21,12 +25,12 @@ export function initHomeAnimation(containerId) {
     const scene = new THREE.Scene();
     
     // Camera setup
-    const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000);
+    const camera = new THREE.PerspectiveCamera(50, getWidth() / getHeight(), 0.1, 1000);
     camera.position.z = 100;
 
     // Renderer setup
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setSize(getWidth(), getHeight());
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(renderer.domElement);
 
@@ -210,8 +214,8 @@ export function initHomeAnimation(containerId) {
     updateCameraPosition();
 
     window.addEventListener('resize', () => {
-        const width = container.clientWidth;
-        const height = container.clientHeight;
+        const width = getWidth();
+        const height = getHeight();
         camera.aspect = width / height;
         camera.updateProjectionMatrix();
         renderer.setSize(width, height);
