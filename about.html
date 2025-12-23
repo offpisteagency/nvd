@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About Page - NVD Particle Logo</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #001f3f; } /* Dark blue bg to match site */
+        #hero-canvas {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+    </style>
+    <!-- Import map for Three.js (optional since we use full URL, but good for local fallback) -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="hero-canvas"></div>
+    <script type="module">
+        import { initAboutAnimation } from './animations/about.js';
+        initAboutAnimation('hero-canvas');
+    </script>
+</body>
+</html>
