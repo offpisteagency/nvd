@@ -261,8 +261,8 @@ export function initAboutAnimation(containerId) {
         
         // Opacity gradient (brighter at top)
         const normalizedY = (y + 20) / 40; // Approx range -20 to 20
-        opacityArray[i] = 0.2 + normalizedY * 0.6;
-        sizeArray[i] = 0.8 + Math.random() * 0.6;
+        opacityArray[i] = 0.5 + normalizedY * 0.5; // Range: 0.5 to 1.0
+        sizeArray[i] = 1.2 + Math.random() * 0.8; // Larger points: 1.2 to 2.0
     }
     
     particleGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
