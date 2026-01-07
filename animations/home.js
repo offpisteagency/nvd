@@ -1,10 +1,10 @@
-import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import * as THREE from '../lib/three/three.module.js';
 
 export function initHomeAnimation(containerId) {
     const container = document.getElementById(containerId);
     if (!container) {
-        console.error(`Container #${containerId} not found`);
-        return;
+        console.error(`[NVD Animation] Container #${containerId} not found`);
+        return null;
     }
 
     // Get dimensions - fallback to window size if container has no dimensions
@@ -171,13 +171,14 @@ export function initHomeAnimation(containerId) {
     const maxRotation = 0.12;
     const smoothing = 0.025;
 
-    window.addEventListener('mousemove', (event) => {
+    function onMouseMove(event) {
         const mouseX = (event.clientX / window.innerWidth) * 2 - 1;
         const mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
         
         targetRotation.x = -mouseY * maxRotation;
         targetRotation.y = mouseX * maxRotation;
-    });
+    }
+    window.addEventListener('mousemove', onMouseMove);
 
     // Resize handling
     function updateCameraPosition() {
@@ -192,23 +193,27 @@ export function initHomeAnimation(containerId) {
     }
     updateCameraPosition();
 
-    window.addEventListener('resize', () => {
+    function onResize() {
         const width = getWidth();
         const height = getHeight();
         camera.aspect = width / height;
         camera.updateProjectionMatrix();
         renderer.setSize(width, height);
         updateCameraPosition();
-    });
+    }
+    window.addEventListener('resize', onResize);
 
     // Animation loop
     let time = 0;
     const startTime = performance.now();
     const positionAttribute = geometry.getAttribute('position');
     const opacityAttribute = geometry.getAttribute('opacity');
+    let animationId = null;
+    let isDestroyed = false;
     
     function animate() {
-        requestAnimationFrame(animate);
+        if (isDestroyed) return;
+        animationId = requestAnimationFrame(animate);
         time += 0.008;
 
         // Smooth mouse rotation (no auto-rotation)
@@ -292,9 +297,28 @@ export function initHomeAnimation(containerId) {
     
     animate();
 
-    return { scene, camera, renderer };
+    // Cleanup function
+    function destroy() {
+        isDestroyed = true;
+        if (animationId) {
+            cancelAnimationFrame(animationId);
+        }
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('resize', onResize);
+        
+        geometry.dispose();
+        material.dispose();
+        renderer.dispose();
+        
+        if (renderer.domElement && renderer.domElement.parentNode) {
+            renderer.domElement.parentNode.removeChild(renderer.domElement);
+        }
+    }
+
+    return { scene, camera, renderer, destroy };
 }
 
+// Auto-init when loaded directly (not as module import)
 if (typeof window !== 'undefined') {
     const scriptTag = document.querySelector('script[src*="home.js"]');
     if (scriptTag) {
@@ -303,3 +327,4 @@ if (typeof window !== 'undefined') {
         });
     }
 }
+

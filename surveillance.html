@@ -3,27 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Surveillance Eye Animation</title>
+    <title>Surveillance Animation - NVD Dots</title>
     <link rel="stylesheet" href="style.css">
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; } /* Dark bg for the eye */
+        body { margin: 0; overflow: hidden; background-color: #000; }
         #hero-canvas {
             width: 100vw;
             height: 100vh;
             display: block;
         }
     </style>
-    <!-- Import map for Three.js -->
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
-            }
-        }
-    </script>
 </head>
 <body>
     <div id="hero-canvas"></div>
-    <script type="module" src="animations/surveillance.js"></script>
+    <script type="module">
+        import { initSurveillanceAnimation } from './animations/surveillance.js';
+        initSurveillanceAnimation('hero-canvas');
+    </script>
 </body>
 </html>

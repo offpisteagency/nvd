@@ -1,21 +1,23 @@
-import * as THREE from 'three';
+import * as THREE from '../lib/three/three.module.js';
 
 export function initAlarmcentraleAnimation(containerId) {
     const container = document.getElementById(containerId);
     if (!container) {
-        console.error(`Container #${containerId} not found`);
-        return;
+        console.error(`[NVD Animation] Container #${containerId} not found`);
+        return null;
     }
+
+    // Get dimensions
+    const getWidth = () => container.clientWidth || window.innerWidth;
+    const getHeight = () => container.clientHeight || window.innerHeight;
 
     // Configuration
     const config = {
         color: 0xadadad,
-        // Sphere structure
         sphereRadius: 35,
-        particleCount: 20000, // Dense particles on sphere surface
-        // Connection lines
-        lineParticleCount: 8000, // Particles for connection lines
-        satelliteCount: 40, // Number of satellite connection points
+        particleCount: 20000,
+        lineParticleCount: 8000,
+        satelliteCount: 40,
         connectionDistance: 18,
     };
 
@@ -23,12 +25,12 @@ export function initAlarmcentraleAnimation(containerId) {
     const scene = new THREE.Scene();
     
     // Camera setup
-    const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000);
+    const camera = new THREE.PerspectiveCamera(50, getWidth() / getHeight(), 0.1, 1000);
     camera.position.z = 100;
 
     // Renderer setup
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setSize(getWidth(), getHeight());
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(renderer.domElement);
 
@@ -38,7 +40,7 @@ export function initAlarmcentraleAnimation(containerId) {
 
     // Generate satellite positions using Fibonacci sphere distribution
     const satellites = [];
-    const phi = Math.PI * (3 - Math.sqrt(5)); // Golden angle
+    const phi = Math.PI * (3 - Math.sqrt(5));
 
     for (let i = 0; i < config.satelliteCount; i++) {
         const y = 1 - (i / (config.satelliteCount - 1)) * 2;
@@ -57,11 +59,9 @@ export function initAlarmcentraleAnimation(containerId) {
 
     // Calculate connections between satellites
     const connections = [];
-    // Connect to center
     satellites.forEach(sat => {
         connections.push({ from: { x: 0, y: 0, z: 0 }, to: sat });
     });
-    // Connect nearby satellites
     for (let i = 0; i < satellites.length; i++) {
         for (let j = i + 1; j < satellites.length; j++) {
             const dx = satellites[i].x - satellites[j].x;
@@ -74,10 +74,8 @@ export function initAlarmcentraleAnimation(containerId) {
         }
     }
 
-    // Total particles
     const totalParticles = config.particleCount + config.lineParticleCount;
     
-    // Create particle system
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(totalParticles * 3);
     const opacities = new Float32Array(totalParticles);
@@ -87,9 +85,8 @@ export function initAlarmcentraleAnimation(containerId) {
     const floatOffsets = new Float32Array(totalParticles * 3);
     const floatSpeeds = new Float32Array(totalParticles);
 
-    // 1. Sphere surface particles
+    // Sphere surface particles
     for (let i = 0; i < config.particleCount; i++) {
-        // Fibonacci sphere distribution for uniform coverage
         const y = 1 - (i / (config.particleCount - 1)) * 2;
         const radiusAtY = Math.sqrt(1 - y * y);
         const theta = phi * i;
@@ -111,26 +108,24 @@ export function initAlarmcentraleAnimation(containerId) {
         floatOffsets[i * 3 + 2] = Math.random() * Math.PI * 2;
         floatSpeeds[i] = 0.3 + Math.random() * 0.7;
 
-        // Vertical gradient (bright top, dark bottom)
-        const normalizedY = (yPos / config.sphereRadius + 1) / 2; // 0 at bottom, 1 at top
+        const normalizedY = (yPos / config.sphereRadius + 1) / 2;
         const gradientOpacity = 0.15 + normalizedY * 0.85;
         
-        // Make center brighter (radial boost)
         const distFromCenter = Math.sqrt(x * x + yPos * yPos + z * z);
-        const normalizedDist = distFromCenter / config.sphereRadius; // 0 at center, 1 at edge
-        const centerBoost = 1.0 - normalizedDist * 0.4; // Brighter near center (up to 40% boost)
+        const normalizedDist = distFromCenter / config.sphereRadius;
+        const centerBoost = 1.0 - normalizedDist * 0.4;
         
-        opacities[i] = gradientOpacity * (1.0 + centerBoost * 0.5); // Up to 50% brighter at center
+        opacities[i] = gradientOpacity * (1.0 + centerBoost * 0.5);
         sizes[i] = 1.0 + Math.random() * 0.5;
     }
 
-    // 2. Connection line particles
+    // Connection line particles
     const particlesPerConnection = Math.floor(config.lineParticleCount / connections.length);
     let lineIndex = config.particleCount;
     
     connections.forEach(conn => {
         for (let j = 0; j < particlesPerConnection && lineIndex < totalParticles; j++) {
-            const t = Math.random(); // Random position along line
+            const t = Math.random();
             const x = conn.from.x + (conn.to.x - conn.from.x) * t;
             const y = conn.from.y + (conn.to.y - conn.from.y) * t;
             const z = conn.from.z + (conn.to.z - conn.from.z) * t;
@@ -148,17 +143,15 @@ export function initAlarmcentraleAnimation(containerId) {
             floatOffsets[lineIndex * 3 + 2] = Math.random() * Math.PI * 2;
             floatSpeeds[lineIndex] = 0.3 + Math.random() * 0.7;
 
-            // Vertical gradient for lines too
             const normalizedY = (y / config.sphereRadius + 1) / 2;
-            const gradientOpacity = 0.1 + normalizedY * 0.5; // Lines slightly more transparent
+            const gradientOpacity = 0.1 + normalizedY * 0.5;
             
-            // Center brightness boost for lines too
             const distFromCenter = Math.sqrt(x * x + y * y + z * z);
             const normalizedDist = distFromCenter / config.sphereRadius;
             const centerBoost = 1.0 - normalizedDist * 0.3;
             
             opacities[lineIndex] = gradientOpacity * (1.0 + centerBoost * 0.4);
-            sizes[lineIndex] = 0.8 + Math.random() * 0.3; // Slightly smaller
+            sizes[lineIndex] = 0.8 + Math.random() * 0.3;
             
             lineIndex++;
         }
@@ -168,7 +161,6 @@ export function initAlarmcentraleAnimation(containerId) {
     geometry.setAttribute('opacity', new THREE.BufferAttribute(opacities, 1));
     geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
 
-    // Custom shader material (same style as surveillance/familyoffice)
     const material = new THREE.ShaderMaterial({
         uniforms: {
             color: { value: new THREE.Color(config.color) },
@@ -187,7 +179,6 @@ export function initAlarmcentraleAnimation(containerId) {
                 vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
                 vDepth = -mvPosition.z;
                 
-                // Size varies slightly with depth for 3D feel
                 float depthScale = 250.0 / vDepth;
                 gl_PointSize = size * pointSize * depthScale;
                 gl_Position = projectionMatrix * mvPosition;
@@ -198,12 +189,10 @@ export function initAlarmcentraleAnimation(containerId) {
             varying float vOpacity;
             
             void main() {
-                // Circular point
                 vec2 center = gl_PointCoord - vec2(0.5);
                 float dist = length(center);
                 if (dist > 0.5) discard;
                 
-                // Soft edge
                 float alpha = smoothstep(0.5, 0.2, dist) * vOpacity;
                 gl_FragColor = vec4(color, alpha);
             }
@@ -216,19 +205,20 @@ export function initAlarmcentraleAnimation(containerId) {
     const particles = new THREE.Points(geometry, material);
     mainGroup.add(particles);
 
-    // Mouse interaction - subtle rotation influence
+    // Mouse interaction
     const targetRotation = { x: 0, y: 0 };
     const currentRotation = { x: 0, y: 0 };
     const maxRotation = 0.1;
     const smoothing = 0.025;
 
-    window.addEventListener('mousemove', (event) => {
+    function onMouseMove(event) {
         const mouseX = (event.clientX / window.innerWidth) * 2 - 1;
         const mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
         
         targetRotation.x = -mouseY * maxRotation;
         targetRotation.y = mouseX * maxRotation;
-    });
+    }
+    window.addEventListener('mousemove', onMouseMove);
 
     // Handle resize
     function updateCameraPosition() {
@@ -243,34 +233,35 @@ export function initAlarmcentraleAnimation(containerId) {
     }
     updateCameraPosition();
 
-    window.addEventListener('resize', () => {
-        const width = container.clientWidth;
-        const height = container.clientHeight;
+    function onResize() {
+        const width = getWidth();
+        const height = getHeight();
         camera.aspect = width / height;
         camera.updateProjectionMatrix();
         renderer.setSize(width, height);
         updateCameraPosition();
-    });
+    }
+    window.addEventListener('resize', onResize);
 
     // Animation loop
     let time = 0;
     let autoRotation = 0;
     const positionAttribute = geometry.getAttribute('position');
+    let animationId = null;
+    let isDestroyed = false;
     
     function animate() {
-        requestAnimationFrame(animate);
+        if (isDestroyed) return;
+        animationId = requestAnimationFrame(animate);
         time += 0.008;
-        autoRotation += 0.0008; // Slower continuous rotation
+        autoRotation += 0.0008;
 
-        // Smooth mouse rotation
         currentRotation.x += (targetRotation.x - currentRotation.x) * smoothing;
         currentRotation.y += (targetRotation.y - currentRotation.y) * smoothing;
         
-        // Combine auto-rotation with mouse influence
         mainGroup.rotation.x = currentRotation.x;
         mainGroup.rotation.y = autoRotation + currentRotation.y;
 
-        // Subtle organic floating movement for each particle
         for (let i = 0; i < totalParticles; i++) {
             const speed = floatSpeeds[i];
             const ox = floatOffsets[i * 3];
@@ -292,9 +283,28 @@ export function initAlarmcentraleAnimation(containerId) {
     
     animate();
 
-    return { scene, camera, renderer };
+    // Cleanup function
+    function destroy() {
+        isDestroyed = true;
+        if (animationId) {
+            cancelAnimationFrame(animationId);
+        }
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('resize', onResize);
+        
+        geometry.dispose();
+        material.dispose();
+        renderer.dispose();
+        
+        if (renderer.domElement && renderer.domElement.parentNode) {
+            renderer.domElement.parentNode.removeChild(renderer.domElement);
+        }
+    }
+
+    return { scene, camera, renderer, destroy };
 }
 
+// Auto-init when loaded directly
 if (typeof window !== 'undefined') {
     const scriptTag = document.querySelector('script[src*="alarmcentrale.js"]');
     if (scriptTag) {

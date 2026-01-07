@@ -1,11 +1,11 @@
-import * as THREE from 'three';
-import { SVGLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/SVGLoader.js';
+import * as THREE from '../lib/three/three.module.js';
+import { SVGLoader } from '../lib/three/SVGLoader.js';
 
 export function initAboutAnimation(containerId) {
     const container = document.getElementById(containerId);
     if (!container) {
-        console.error(`Container #${containerId} not found`);
-        return;
+        console.error(`[NVD Animation] Container #${containerId} not found`);
+        return null;
     }
 
     // Get dimensions - fallback to window size if container has no dimensions
@@ -15,9 +15,9 @@ export function initAboutAnimation(containerId) {
     // Configuration
     const config = {
         color: 0xadadad,
-        particleCount: 15000, // Reduced count slightly as precise sampling is more efficient
+        particleCount: 15000,
         logoScale: 1.0, 
-        logoDepth: 8,  // Z-depth range for 3D volume
+        logoDepth: 8,
     };
 
     // Scene setup
@@ -38,7 +38,6 @@ export function initAboutAnimation(containerId) {
     scene.add(mainGroup);
 
     // --- SVG PARSING & PARTICLE GENERATION ---
-    // The exact SVG path data provided by the user
     const svgData = `
         <svg width="152" height="48" viewBox="0 0 152 48" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M35.0325 9.8998L33.2518 7.46069L28.4338 0.839251H18.8913C14.7339 0.839251 10.8853 2.18793 7.76904 4.46203C3.05879 7.8983 0 13.4508 0 19.7208V48H18.8984V19.771L39.4052 47.9928H62.7842L35.0325 9.8998Z" fill="#F5F5F5"/>
@@ -55,93 +54,25 @@ export function initAboutAnimation(containerId) {
 
     const particles = [];
     
-    // We want to sample points evenly across the total area of all shapes
-    // First, let's get all shapes and their areas to distribute particles proportionally
+    // Get all shapes and their areas
     const shapes = [];
     let totalArea = 0;
 
     shapePaths.forEach((path) => {
         const pathShapes = SVGLoader.createShapes(path);
         pathShapes.forEach((shape) => {
-            // Calculate approximate area to distribute particles fairly
-            // Three.js ShapeUtils.area() handles signed area, so we take abs
             const area = THREE.ShapeUtils.area(shape.getPoints());
             shapes.push({ shape, area: Math.abs(area) });
             totalArea += Math.abs(area);
         });
     });
 
-    // Generate particles
-    shapes.forEach(({ shape, area }) => {
-        // Number of particles for this shape based on its area contribution
-        const count = Math.floor((area / totalArea) * config.particleCount);
-        
-        // Improve sampling: Three.js ShapeGeometry doesn't give random points inside.
-        // We can triangulate the shape and sample from triangles, or use a simple bounding box rejection sampling.
-        // Given the complex curves, rejection sampling on the shape's bounding box is robust.
-        
-        // Get bounding box of the shape
-        const points = shape.getPoints();
-        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-        points.forEach(p => {
-            if (p.x < minX) minX = p.x;
-            if (p.x > maxX) maxX = p.x;
-            if (p.y < minY) minY = p.y;
-            if (p.y > maxY) maxY = p.y;
-        });
-        
-        const width = maxX - minX;
-        const height = maxY - minY;
-        
-        let added = 0;
-        let attempts = 0;
-        // Safety break to prevent infinite loops if shape is degenerate
-        const maxAttempts = count * 20; 
-
-        // For larger shapes, triangulation is better, but for this logo rejection is fine and simpler to implement without extra libs
-        // But to be safer/faster for 20k particles, let's just use Geometry vertices if we can? 
-        // No, let's stick to rejection sampling but optimize:
-        // Or actually, let's simply create a Geometry from the shape and use its vertices?
-        // That would be regular grid-like. We want random.
-        
-        // Better approach: Rejection sampling
-        while (added < count && attempts < maxAttempts) {
-            const x = minX + Math.random() * width;
-            const y = minY + Math.random() * height;
-            
-            // Check if point is inside shape
-            // Using a simple raycasting method or Three's built-in utils?
-            // Three.js Shape doesn't have a direct "isPointInside" method exposed easily without building simpler structures.
-            // Let's use the Path actions.
-            
-            // Actually, an even easier way in Three.js for "random points in shape":
-            // Use ShapeGeometry to triangulate, then sample random points from the triangles (weighted by area).
-            // This is standard and fast.
-            
-            attempts++;
-        }
-    });
-
-    // RE-IMPLEMENTATION: Triangulation Strategy
-    // This is much faster and accurate than rejection sampling for complex shapes
-    
-    // Create a single geometry for all shapes combined to easily sample from
+    // Triangulation for particle generation
     const allShapes = shapes.map(s => s.shape);
     const shapeGeo = new THREE.ShapeGeometry(allShapes);
     
-    // Now we have vertices and faces (triangles).
-    // We can sample random points on the surface of these triangles.
-    
-    // 1. Calculate area of each triangle to weight probability
     const posAttribute = shapeGeo.attributes.position;
     const indexAttribute = shapeGeo.index;
-    
-    // If no index, vertices are just sets of 3. If index, use it.
-    // ShapeGeometry usually produces indexed geometry? Actually usually non-indexed in newer Three versions?
-    // Let's check. Standard is usually non-indexed or indexed.
-    // We'll handle both cases or just force one.
-    
-    // Easier: Let's just loop through faces.
     
     const faces = [];
     let totalGeoArea = 0;
@@ -156,7 +87,6 @@ export function initAboutAnimation(containerId) {
             const vB = new THREE.Vector3().fromBufferAttribute(posAttribute, b);
             const vC = new THREE.Vector3().fromBufferAttribute(posAttribute, c);
             
-            // Area of triangle = 0.5 * |AB x AC|
             const area = new THREE.Vector3().crossVectors(
                 new THREE.Vector3().subVectors(vB, vA),
                 new THREE.Vector3().subVectors(vC, vA)
@@ -183,7 +113,6 @@ export function initAboutAnimation(containerId) {
     
     // Generate particles
     for (let i = 0; i < config.particleCount; i++) {
-        // Select a random face weighted by area
         let r = Math.random() * totalGeoArea;
         let selectedFace = faces[0];
         for (let face of faces) {
@@ -194,8 +123,6 @@ export function initAboutAnimation(containerId) {
             r -= face.area;
         }
         
-        // Sample random point in triangle
-        // P = (1 - sqrt(r1)) * A + (sqrt(r1) * (1 - r2)) * B + (sqrt(r1) * r2) * C
         const r1 = Math.random();
         const r2 = Math.random();
         const sqrtR1 = Math.sqrt(r1);
@@ -212,12 +139,14 @@ export function initAboutAnimation(containerId) {
         particles.push({
             x: p.x,
             y: p.y,
-            z: (Math.random() - 0.5) * config.logoDepth // Add volume
+            z: (Math.random() - 0.5) * config.logoDepth
         });
     }
 
+    // Dispose temporary geometry
+    shapeGeo.dispose();
+
     // --- PARTICLE SYSTEM SETUP ---
-    
     const actualCount = particles.length;
     
     const particleGeometry = new THREE.BufferGeometry();
@@ -229,21 +158,15 @@ export function initAboutAnimation(containerId) {
     const floatOffsets = new Float32Array(actualCount * 3);
     const floatSpeeds = new Float32Array(actualCount);
 
-    // Centering offsets
-    // SVG viewBox="0 0 152 48"
+    // Centering offsets (SVG viewBox="0 0 152 48")
     const cx = 152 / 2;
     const cy = 48 / 2;
 
     for (let i = 0; i < actualCount; i++) {
         const p = particles[i];
         
-        // Transform coordinates:
-        // 1. Center them (subtract cx, cy)
-        // 2. Flip Y (SVG y goes down, 3D y goes up)
-        // 3. Apply scale
-        
         const x = (p.x - cx) * config.logoScale;
-        const y = -(p.y - cy) * config.logoScale; // Flip Y!
+        const y = -(p.y - cy) * config.logoScale; // Flip Y
         const z = p.z;
         
         posArray[i * 3] = x;
@@ -259,17 +182,16 @@ export function initAboutAnimation(containerId) {
         floatOffsets[i * 3 + 2] = Math.random() * Math.PI * 2;
         floatSpeeds[i] = 0.3 + Math.random() * 0.7;
         
-        // Opacity gradient (brighter at top)
-        const normalizedY = (y + 20) / 40; // Approx range -20 to 20
-        opacityArray[i] = 0.5 + normalizedY * 0.5; // Range: 0.5 to 1.0
-        sizeArray[i] = 1.2 + Math.random() * 0.8; // Larger points: 1.2 to 2.0
+        const normalizedY = (y + 20) / 40;
+        opacityArray[i] = 0.5 + normalizedY * 0.5;
+        sizeArray[i] = 1.2 + Math.random() * 0.8;
     }
     
     particleGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
     particleGeometry.setAttribute('opacity', new THREE.BufferAttribute(opacityArray, 1));
     particleGeometry.setAttribute('size', new THREE.BufferAttribute(sizeArray, 1));
 
-    // Shader Material (Same as others)
+    // Shader Material
     const material = new THREE.ShaderMaterial({
         uniforms: {
             color: { value: new THREE.Color(config.color) },
@@ -316,28 +238,33 @@ export function initAboutAnimation(containerId) {
     const maxRotation = 0.2; 
     const smoothing = 0.05;
 
-    window.addEventListener('mousemove', (event) => {
+    function onMouseMove(event) {
         const mouseX = (event.clientX / window.innerWidth) * 2 - 1;
         const mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
         targetRotation.x = -mouseY * maxRotation;
         targetRotation.y = mouseX * maxRotation;
-    });
+    }
+    window.addEventListener('mousemove', onMouseMove);
 
     // Resize
-    window.addEventListener('resize', () => {
+    function onResize() {
         const width = getWidth();
         const height = getHeight();
         camera.aspect = width / height;
         camera.updateProjectionMatrix();
         renderer.setSize(width, height);
-    });
+    }
+    window.addEventListener('resize', onResize);
 
     // Animate
     let time = 0;
     const posAttr = particleGeometry.getAttribute('position');
+    let animationId = null;
+    let isDestroyed = false;
     
     function animate() {
-        requestAnimationFrame(animate);
+        if (isDestroyed) return;
+        animationId = requestAnimationFrame(animate);
         time += 0.01;
 
         currentRotation.x += (targetRotation.x - currentRotation.x) * smoothing;
@@ -367,10 +294,29 @@ export function initAboutAnimation(containerId) {
     }
     
     animate();
+
+    // Cleanup function
+    function destroy() {
+        isDestroyed = true;
+        if (animationId) {
+            cancelAnimationFrame(animationId);
+        }
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('resize', onResize);
+        
+        particleGeometry.dispose();
+        material.dispose();
+        renderer.dispose();
+        
+        if (renderer.domElement && renderer.domElement.parentNode) {
+            renderer.domElement.parentNode.removeChild(renderer.domElement);
+        }
+    }
     
-    return { scene, camera, renderer };
+    return { scene, camera, renderer, destroy };
 }
 
+// Auto-init when loaded directly
 if (typeof window !== 'undefined') {
     const scriptTag = document.querySelector('script[src*="about.js"]');
     if (scriptTag) {
@@ -379,3 +325,4 @@ if (typeof window !== 'undefined') {
         });
     }
 }
+
