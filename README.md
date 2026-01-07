@@ -41,20 +41,8 @@ nvd/
 5. Click **Save**
 6. Your files will be available at: `https://offpisteagency.github.io/nvd/`
 
-### Step 2: Add Container in Webflow
 
-Add an HTML Embed or a Div block where you want the animation to appear:
-
-```html
-<div id="hero-canvas" style="width: 100%; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1;"></div>
-```
-
-**Important styling notes:**
-- The container needs explicit dimensions (`width` and `height`)
-- Use `position: absolute` or `fixed` for full-screen backgrounds
-- Adjust `z-index` based on your layout needs
-
-### Step 3: Add Script in Webflow
+### Step 2: Add Script in Webflow
 
 In Webflow, go to **Project Settings → Custom Code → Footer Code** and add:
 
