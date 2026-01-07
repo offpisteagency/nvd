@@ -15,7 +15,7 @@ Beautiful Three.js particle animations for the NVD website. Self-contained with 
 ## 📁 File Structure
 
 ```
-nvd-dots/
+nvd/
 ├── lib/
 │   └── three/
 │       ├── three.module.js      # Three.js v0.160.0 (local copy)
@@ -39,7 +39,7 @@ nvd-dots/
 3. Under "Source", select **Deploy from a branch**
 4. Choose **main** branch and **/ (root)** folder
 5. Click **Save**
-6. Your files will be available at: `https://YOUR-USERNAME.github.io/nvd-dots/`
+6. Your files will be available at: `https://offpisteagency.github.io/nvd/`
 
 ### Step 2: Add Container in Webflow
 
@@ -60,7 +60,7 @@ In Webflow, go to **Project Settings → Custom Code → Footer Code** and add:
 
 ```html
 <script type="module" crossorigin>
-    import { initHomeAnimation } from 'https://YOUR-USERNAME.github.io/nvd-dots/animations/home.js';
+    import { initHomeAnimation } from 'https://offpisteagency.github.io/nvd/animations/home.js';
     
     // Initialize when DOM is ready
     document.addEventListener('DOMContentLoaded', () => {
@@ -75,23 +75,23 @@ Replace `initHomeAnimation` with the appropriate function for each page:
 
 ```javascript
 // Home page
-import { initHomeAnimation } from 'https://YOUR-USERNAME.github.io/nvd-dots/animations/home.js';
+import { initHomeAnimation } from 'https://offpisteagency.github.io/nvd/animations/home.js';
 initHomeAnimation('hero-canvas');
 
 // About page
-import { initAboutAnimation } from 'https://YOUR-USERNAME.github.io/nvd-dots/animations/about.js';
+import { initAboutAnimation } from 'https://offpisteagency.github.io/nvd/animations/about.js';
 initAboutAnimation('hero-canvas');
 
 // Family Office page
-import { initFamilyOfficeAnimation } from 'https://YOUR-USERNAME.github.io/nvd-dots/animations/familyoffice.js';
+import { initFamilyOfficeAnimation } from 'https://offpisteagency.github.io/nvd/animations/familyoffice.js';
 initFamilyOfficeAnimation('hero-canvas');
 
 // Surveillance page
-import { initSurveillanceAnimation } from 'https://YOUR-USERNAME.github.io/nvd-dots/animations/surveillance.js';
+import { initSurveillanceAnimation } from 'https://offpisteagency.github.io/nvd/animations/surveillance.js';
 initSurveillanceAnimation('hero-canvas');
 
 // Alarmcentrale page
-import { initAlarmcentraleAnimation } from 'https://YOUR-USERNAME.github.io/nvd-dots/animations/alarmcentrale.js';
+import { initAlarmcentraleAnimation } from 'https://offpisteagency.github.io/nvd/animations/alarmcentrale.js';
 initAlarmcentraleAnimation('hero-canvas');
 ```
 
@@ -107,7 +107,7 @@ Here's a complete example for the Home page:
 **Footer Code (Project Settings → Custom Code):**
 ```html
 <script type="module" crossorigin>
-    import { initHomeAnimation } from 'https://YOUR-USERNAME.github.io/nvd-dots/animations/home.js';
+    import { initHomeAnimation } from 'https://offpisteagency.github.io/nvd/animations/home.js';
     
     document.addEventListener('DOMContentLoaded', () => {
         const animation = initHomeAnimation('hero-canvas');
